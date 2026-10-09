@@ -10,7 +10,6 @@ from an **SD card or internal storage**, and with every common root solution: **
 KernelSU Next, SukiSU, APatch**.
 
 <a href="../../releases/latest/download/ABL-Dual-Boot.apk"><img alt="Download APK" src="https://img.shields.io/github/v/release/kingsleydon/abl-dualboot?label=Download%20APK&logo=android" height="28"></a>
-<a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/kingsleydon/abl-dualboot"><img alt="Get it on Obtainium" src="docs/badge_obtainium.png" height="48"></a>
 
 ## Screenshots
 
