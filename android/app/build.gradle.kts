@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "io.github.kingsleydon.bootswitch"
+    namespace = "io.github.kingsleydon.abldualboot"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "io.github.kingsleydon.bootswitch"
+        applicationId = "io.github.kingsleydon.abldualboot"
         minSdk = 31
         targetSdk = 37
         versionCode = providers.environmentVariable("VERSION_CODE").orElse("1").get().toInt()
@@ -56,4 +56,5 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.libsu.core)
+    implementation(libs.androidx.work.runtime.ktx)
 }

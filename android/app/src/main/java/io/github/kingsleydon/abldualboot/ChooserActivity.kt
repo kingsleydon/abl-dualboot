@@ -1,4 +1,4 @@
-package io.github.kingsleydon.bootswitch
+package io.github.kingsleydon.abldualboot
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity

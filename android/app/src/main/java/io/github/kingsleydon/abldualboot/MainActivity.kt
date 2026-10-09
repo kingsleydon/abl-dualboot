@@ -1,8 +1,10 @@
-package io.github.kingsleydon.bootswitch
+package io.github.kingsleydon.abldualboot
 
 import android.Manifest
 import android.app.StatusBarManager
 import android.content.ComponentName
+import android.content.Intent
+import android.net.Uri
 import android.graphics.drawable.Icon
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -46,6 +48,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -105,17 +108,23 @@ private fun App(onAddTile: () -> Unit) {
     var dialog by remember { mutableStateOf<Dialog?>(null) }
     var busy by remember { mutableStateOf(false) }
     var log by remember { mutableStateOf<String?>(null) }
+    var release by remember { mutableStateOf<Updater.Release?>(null) }
+    var updating by remember { mutableStateOf(false) }
+    var autoUpdate by remember { mutableStateOf(Settings.autoUpdate(context)) }
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     fun refresh() = scope.launch { state = DeviceState.Loading; state = Device.load(context) }
-    LaunchedEffect(Unit) { refresh() }
+    LaunchedEffect(Unit) {
+        refresh()
+        release = try { Updater.check() } catch (e: Exception) { null }
+    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             LargeTopAppBar(
-                title = { Text("Boot Switch") },
+                title = { Text("ABL Dual Boot") },
                 actions = { IconButton(onClick = { refresh() }) { Icon(Icons.Filled.Refresh, "Refresh") } },
                 scrollBehavior = scroll,
             )
@@ -130,6 +139,22 @@ private fun App(onAddTile: () -> Unit) {
                     DeviceState.Loading -> Box(Modifier.fillMaxWidth().padding(48.dp), Alignment.Center) { CircularProgressIndicator() }
                     is DeviceState.NoRoot -> NoRootCard(s.manager) { Root.retry(); refresh() }
                     is DeviceState.Ready -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        release?.let { r ->
+                            UpdateCard(r, updating) {
+                                if (!context.packageManager.canRequestPackageInstalls()) {
+                                    // One-time permission so ABL Dual Boot can update itself (Settings > Install unknown apps).
+                                    context.startActivity(
+                                        Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")),
+                                    )
+                                } else {
+                                    updating = true
+                                    scope.launch {
+                                        Updater.install(context, r)?.let { snackbar.showSnackbar(it) }
+                                        updating = false
+                                    }
+                                }
+                            }
+                        }
                         if (!s.abl.installed) BootloaderCard(s.abl) { restore -> dialog = Dialog.InstallAbl(s.abl.soc, restore) }
                         log?.let { LogCard(it) }
                         SectionLabel("Restart into")
@@ -149,6 +174,14 @@ private fun App(onAddTile: () -> Unit) {
                             Spacer(Modifier.size(8.dp))
                             Text("Add Quick Settings tile")
                         }
+                        ListItem(
+                            headlineContent = { Text("Install updates automatically") },
+                            supportingContent = { Text("Checks GitHub once a day and installs new releases. Otherwise you get a notification.") },
+                            trailingContent = {
+                                Switch(checked = autoUpdate, onCheckedChange = { autoUpdate = it; Settings.setAutoUpdate(context, it) })
+                            },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        )
                         if (s.abl.installed) {
                             Row(Modifier.padding(horizontal = 4.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Filled.CheckCircle, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
@@ -214,6 +247,24 @@ private fun App(onAddTile: () -> Unit) {
             },
             dismissButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
         )
+    }
+}
+
+@Composable
+private fun UpdateCard(release: Updater.Release, updating: Boolean, onUpdate: () -> Unit) {
+    ElevatedCard(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+    ) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Version ${release.version} is available", style = MaterialTheme.typography.titleMedium)
+            if (release.notes.isNotEmpty()) {
+                Text(release.notes.lines().take(6).joinToString("\n"), style = MaterialTheme.typography.bodySmall)
+            }
+            Button(onClick = onUpdate, enabled = !updating, modifier = Modifier.fillMaxWidth()) {
+                Text(if (updating) "Updating…" else "Update")
+            }
+        }
     }
 }
 
@@ -287,7 +338,7 @@ private fun NoRootCard(manager: Root.Manager?, onRetry: () -> Unit) {
             }
             Text(
                 manager?.let { "${it.label} detected. ${it.grantSteps}" }
-                    ?: "No root manager found. Install Magisk, KernelSU or APatch, then allow Boot Switch.",
+                    ?: "No root manager found. Install Magisk, KernelSU or APatch, then allow ABL Dual Boot.",
             )
             Button(onClick = onRetry, Modifier.fillMaxWidth()) { Text("Try again") }
         }

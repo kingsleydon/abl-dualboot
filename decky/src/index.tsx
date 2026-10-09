@@ -20,7 +20,7 @@ function confirmRestart(label: string, detail: string, target: string, location 
       strOKButtonText="Restart"
       onOK={async () => {
         const result = await restartInto(target, location);
-        if (!result.ok) toaster.toast({ title: "Boot Switch", body: result.error ?? "Failed - nothing changed" });
+        if (!result.ok) toaster.toast({ title: "ABL Dual Boot", body: result.error ?? "Failed - nothing changed" });
       }}
     />,
   );
@@ -44,7 +44,7 @@ function Content() {
       <PanelSectionRow>
         <ButtonItem
           layout="below"
-          description="Keeps starting Android until you switch back from the Boot Switch app."
+          description="Keeps starting Android until you switch back from the ABL Dual Boot app."
           onClick={() => confirmRestart("Android", "Your device restarts now and keeps starting Android until you switch back.", "android")}
         >
           Android
@@ -74,8 +74,8 @@ function Content() {
 }
 
 export default definePlugin(() => ({
-  name: "Boot Switch",
-  titleView: <div className={staticClasses.Title}>Boot Switch</div>,
+  name: "ABL Dual Boot",
+  titleView: <div className={staticClasses.Title}>ABL Dual Boot</div>,
   content: <Content />,
   icon: <FaExchangeAlt />,
 }));

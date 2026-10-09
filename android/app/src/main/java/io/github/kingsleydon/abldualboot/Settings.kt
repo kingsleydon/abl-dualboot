@@ -1,8 +1,8 @@
-package io.github.kingsleydon.bootswitch
+package io.github.kingsleydon.abldualboot
 
 import android.content.Context
 
-/** Remembers the last Linux destination so the tile can offer it first. */
+/** Small app preferences: the last Linux destination (offered first by the tile) and auto-update. */
 object Settings {
     private fun prefs(context: Context) = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
@@ -16,4 +16,8 @@ object Settings {
     fun setLastTarget(context: Context, target: Target) {
         prefs(context).edit().putString("last_location", target.location).putString("last_name", target.name).commit()
     }
+
+    fun autoUpdate(context: Context) = prefs(context).getBoolean("auto_update", false)
+
+    fun setAutoUpdate(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean("auto_update", enabled).apply()
 }

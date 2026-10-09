@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.0.0
+- Renamed to **ABL Dual Boot** (was Boot Switch). New app ID: uninstall the old app, install this one and allow root again.
+- App updates itself from GitHub releases through Android's PackageInstaller, verified against the release checksum; optional automatic updates.
+- Linux installer removes the old Boot Switch install.
+- Release notes come from this changelog; a weekly workflow proposes new ROCKNIX ABL releases.
+
 ## v1.2.0
 - Pick any Linux system to restart into: internal storage, SD card or USB, shown by name (Armada, ROCKNIX, Batocera, ...).
 - App redesigned around "Restart into"; bootloader card only appears when something needs fixing.

@@ -74,7 +74,7 @@ jobs:
           VERSION_CODE: ${{ needs.version.outputs.code }}
         run: |
           ./gradlew :app:assembleRelease
-          mkdir -p ../out && cp app/build/outputs/apk/release/*.apk ../out/BootSwitch.apk
+          mkdir -p ../out && cp app/build/outputs/apk/release/*.apk ../out/ABL-Dual-Boot.apk
       - uses: actions/upload-artifact@v7
         with:
           name: android
@@ -100,10 +100,10 @@ jobs:
           pnpm run build
       - name: Package (decky-plugin-template layout)
         run: |
-          P=pkg/boot-switch; mkdir -p $P/dist
+          P=pkg/abl-dualboot; mkdir -p $P/dist
           cp decky/dist/index.js $P/dist/
-          cp decky/package.json decky/plugin.json decky/main.py decky/LICENSE linux/bootswitch.py $P/
-          mkdir -p out && (cd pkg && zip -rX ../out/boot-switch-decky.zip boot-switch)
+          cp decky/package.json decky/plugin.json decky/main.py decky/LICENSE linux/dualboot.py $P/
+          mkdir -p out && (cd pkg && zip -rX ../out/abl-dualboot-decky.zip abl-dualboot)
       - uses: actions/upload-artifact@v7
         with:
           name: decky
@@ -124,7 +124,7 @@ jobs:
       - name: Magisk / KernelSU / APatch modules
         run: |
           mkdir -p out
-          cp shared/bootswitch.sh modules/boot-to-linux/
+          cp shared/dualboot.sh modules/boot-to-linux/
           cp shared/abl.sh modules/abl-reflash/ && cp -r abl modules/abl-reflash/abl
           for m in boot-to-linux abl-reflash; do
             sed -i "s/^version=.*/version=v$VERSION_NAME/; s/^versionCode=.*/versionCode=$VERSION_CODE/" modules/$m/module.prop
@@ -137,7 +137,7 @@ jobs:
           done
       - name: Linux scripts
         run: |
-          (cd linux && zip -X ../out/bootswitch-linux.zip bootswitch.py reboot-to-android.desktop)
+          (cd linux && zip -X ../out/abl-dualboot-linux.zip dualboot.py reboot-to-android.desktop)
           cp linux/install.sh out/install-linux.sh
       - uses: actions/upload-artifact@v7
         with:
@@ -153,6 +153,7 @@ jobs:
       id-token: write
       attestations: write
     steps:
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           pattern: "{android,decky,modules}"
@@ -164,4 +165,8 @@ jobs:
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+        run: |
+          # Release notes = this version's section of CHANGELOG.md
+          awk -v v="## $GITHUB_REF_NAME" '$0==v{f=1;next} /^## /{f=0} f' CHANGELOG.md > notes.md
+          test -s notes.md || { echo "CHANGELOG.md has no '## $GITHUB_REF_NAME' section"; exit 1; }
+          gh release create "$GITHUB_REF_NAME" out/* --title "$GITHUB_REF_NAME" --notes-file notes.md

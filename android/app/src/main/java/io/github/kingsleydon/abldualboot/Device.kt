@@ -1,4 +1,4 @@
-package io.github.kingsleydon.bootswitch
+package io.github.kingsleydon.abldualboot
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
@@ -28,14 +28,14 @@ sealed interface DeviceState {
 
 /** Talks to the bundled shell scripts (shared with the Magisk/KernelSU modules). */
 object Device {
-    const val BACKUP_DIR = "/sdcard/BootSwitch/backup"
+    const val BACKUP_DIR = "/sdcard/ABLDualBoot/backup"
 
-    private fun bootswitch(context: Context, args: String) =
-        Root.run("BOOTSWITCH_TMP='${context.cacheDir}' sh '${Root.asset(context, "bootswitch.sh")}' $args")
+    private fun dualboot(context: Context, args: String) =
+        Root.run("DUALBOOT_TMP='${context.cacheDir}' sh '${Root.asset(context, "dualboot.sh")}' $args")
 
     suspend fun load(context: Context): DeviceState = withContext(Dispatchers.IO) {
         if (!Root.available()) return@withContext DeviceState.NoRoot(Root.detectManager(context))
-        val status = bootswitch(context, "status")
+        val status = dualboot(context, "status")
         DeviceState.Ready(
             defaultBoot = when (status.output.substringBefore(" ")) {
                 "android" -> BootTarget.ANDROID; "linux" -> BootTarget.LINUX; else -> BootTarget.UNKNOWN
@@ -47,7 +47,7 @@ object Device {
     }
 
     fun targets(context: Context): List<Target> =
-        bootswitch(context, "targets").output.lines().mapNotNull { line ->
+        dualboot(context, "targets").output.lines().mapNotNull { line ->
             line.trim().split(" ", limit = 2).takeIf { it.size == 2 }?.let { Target(it[0], it[1]) }
         }
 
@@ -60,7 +60,7 @@ object Device {
 
     /** Sets the target as default boot and restarts. Returns an error message, or null on success. */
     suspend fun reboot(context: Context, target: Target): String? = withContext(Dispatchers.IO) {
-        val r = bootswitch(context, "linux ${target.location}")
+        val r = dualboot(context, "linux ${target.location}")
         if (!r.ok) return@withContext r.output.removePrefix("! ").ifBlank { "Root access denied" }
         Settings.setLastTarget(context, target)
         Root.run("reboot")

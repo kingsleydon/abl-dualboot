@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # Read or set the ROCKNIX ABL default boot target stored in devinfo.
-# Usage: bootswitch.sh status | targets | android | linux [sd|internal|usb]
+# Usage: dualboot.sh status | targets | android | linux [sd|internal|usb]
 #   targets prints one Linux location per line, "<location> <name>": internal and sd when present (name from the
 #   first partition's label, e.g. Armada, ROCKNIX), and usb, which cannot be detected before booting.
 #   linux without a location picks it like the ABL menu does (below); a location overrides that.
@@ -14,7 +14,7 @@
 #                     userdata on internal storage, BootSourceMode=3 (SDcard)
 # Only these two bytes are written; anything else changing restores the original.
 P=${DEVINFO:-/dev/block/by-name/devinfo}
-TMP=${BOOTSWITCH_TMP:-/data/local/tmp}
+TMP=${DUALBOOT_TMP:-/data/local/tmp}
 
 hex() { dd if="$P" bs=1 skip=$(($1)) count=$2 2>/dev/null | xxd -p | tr -d '\n'; }
 putb() { printf "\\$(printf %03o $((0x$1)))" | dd of="$2" bs=1 seek=$(($3)) count=1 conv=notrunc,fsync 2>/dev/null; }

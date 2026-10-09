@@ -4,4 +4,4 @@ version=v2.0
 versionCode=2
 author=kingsleydon
 description=Tap Action after an Android system update to restore the ROCKNIX ABL (Linux boot menu). Supports SM8250/SM8550/SM8650/SM8750/SM6115.
-updateJson=https://github.com/kingsleydon/rocknix-bootswitch/releases/latest/download/abl-reflash-module.json
+updateJson=https://github.com/kingsleydon/abl-dualboot/releases/latest/download/abl-reflash-module.json

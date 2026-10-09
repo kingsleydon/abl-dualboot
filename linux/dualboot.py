@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Read or set the ROCKNIX ABL default boot target stored in devinfo, then reboot.
-# Usage: bootswitch.py status | targets | android | linux [sd|internal|usb]   (add --no-reboot to skip the reboot)
+# Usage: dualboot.py status | targets | android | linux [sd|internal|usb]   (add --no-reboot to skip the reboot)
 #   targets prints one Linux location per line, "<location> <name>": internal and sd when present (name from the
 #   first partition's label, e.g. Armada, ROCKNIX), and usb, which cannot be detected before booting.
 #   linux without a location picks it like the ABL menu does (below); a location overrides that.
@@ -166,7 +166,7 @@ def main():
             print("\n".join(f"{loc} {name}" for loc, name in targets()))
             return
         if cmd not in ("android", "linux"):
-            raise SwitchError("usage: bootswitch.py status | targets | android | linux [sd|internal|usb] [--no-reboot]")
+            raise SwitchError("usage: dualboot.py status | targets | android | linux [sd|internal|usb] [--no-reboot]")
         print(switch(cmd, args[1] if len(args) > 1 else "") + " ok")
     except SwitchError as e:
         sys.exit(f"! {e}")

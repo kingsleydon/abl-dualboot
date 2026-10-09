@@ -23,8 +23,8 @@ body:
     id: versions
     attributes:
       label: "Versions"
-      description: "Boot Switch, Android ROM, Linux distro, root manager"
-      placeholder: "Boot Switch 1.2.0, LineageOS 23.2, Armada 20260926, KernelSU"
+      description: "ABL Dual Boot, Android ROM, Linux distro, root manager"
+      placeholder: "ABL Dual Boot 1.2.0, LineageOS 23.2, Armada 20260926, KernelSU"
     validations:
       required: true
   - type: textarea
@@ -39,6 +39,6 @@ body:
     attributes:
       label: "Status output"
       description: |
-        Android: `su -c "sh /data/data/io.github.kingsleydon.bootswitch/files/bootswitch.sh status; sh /data/data/io.github.kingsleydon.bootswitch/files/bootswitch.sh targets"`
-        Linux: `sudo python3 /etc/bootswitch/bootswitch.py status; sudo python3 /etc/bootswitch/bootswitch.py targets`
+        Android: `su -c "sh /data/data/io.github.kingsleydon.abldualboot/files/dualboot.sh status; sh /data/data/io.github.kingsleydon.abldualboot/files/dualboot.sh targets"`
+        Linux: `sudo python3 /etc/abl-dualboot/dualboot.py status; sudo python3 /etc/abl-dualboot/dualboot.py targets`
       render: text

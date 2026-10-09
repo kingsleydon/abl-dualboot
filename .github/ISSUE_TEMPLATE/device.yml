@@ -1,5 +1,5 @@
 name: Device report
-description: Tell us Boot Switch works (or not) on your device
+description: Tell us ABL Dual Boot works (or not) on your device
 labels: [device-report]
 body:
   - type: input

@@ -1,4 +1,4 @@
-package io.github.kingsleydon.bootswitch
+package io.github.kingsleydon.abldualboot
 
 import android.app.NotificationChannel
 import android.app.NotificationManager

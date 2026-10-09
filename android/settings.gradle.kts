@@ -13,5 +13,5 @@ dependencyResolutionManagement {
         maven("https://jitpack.io") { content { includeGroup("com.github.topjohnwu.libsu") } }
     }
 }
-rootProject.name = "BootSwitch"
+rootProject.name = "AblDualBoot"
 include(":app")

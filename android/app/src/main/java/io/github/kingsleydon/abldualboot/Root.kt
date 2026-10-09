@@ -1,4 +1,4 @@
-package io.github.kingsleydon.bootswitch
+package io.github.kingsleydon.abldualboot
 
 import android.content.Context
 import android.content.pm.PackageManager
@@ -30,19 +30,19 @@ object Root {
         return file.absolutePath
     }
 
-    const val NO_ROOT = "Boot Switch needs root access. Open the app for setup steps."
+    const val NO_ROOT = "ABL Dual Boot needs root access. Open the app for setup steps."
 
     enum class Manager(val label: String, val packages: List<String>, val grantSteps: String) {
         MAGISK("Magisk", listOf("com.topjohnwu.magisk", "io.github.huskydg.magisk", "io.github.vvb2060.magisk"),
-            "Tap Grant when Magisk asks. If you denied it before: Magisk → Superuser → enable Boot Switch."),
+            "Tap Grant when Magisk asks. If you denied it before: Magisk → Superuser → enable ABL Dual Boot."),
         KERNELSU("KernelSU", listOf("me.weishu.kernelsu"),
-            "Open KernelSU → Superuser → enable Boot Switch."),
+            "Open KernelSU → Superuser → enable ABL Dual Boot."),
         KERNELSU_NEXT("KernelSU Next", listOf("com.rifsxd.ksunext"),
-            "Open KernelSU Next → Superuser → enable Boot Switch."),
+            "Open KernelSU Next → Superuser → enable ABL Dual Boot."),
         SUKISU("SukiSU Ultra", listOf("com.sukisu.ultra"),
-            "Open SukiSU → Superuser → enable Boot Switch."),
+            "Open SukiSU → Superuser → enable ABL Dual Boot."),
         APATCH("APatch", listOf("me.bmax.apatch"),
-            "Open APatch → Superuser → enable Boot Switch."),
+            "Open APatch → Superuser → enable ABL Dual Boot."),
     }
 
     fun detectManager(context: Context): Manager? = Manager.entries.firstOrNull { m ->

@@ -1,11 +1,11 @@
 {
-  "name": "Boot Switch",
+  "name": "ABL Dual Boot",
   "author": "kingsleydon",
   "flags": ["root"],
   "api_version": 1,
   "publish": {
     "tags": ["root", "dual-boot", "rocknix"],
     "description": "One-tap reboot to Android on handhelds that use the ROCKNIX ABL.",
-    "image": "https://opengraph.githubassets.com/1/kingsleydon/rocknix-bootswitch"
+    "image": "https://opengraph.githubassets.com/1/kingsleydon/abl-dualboot"
   }
 }

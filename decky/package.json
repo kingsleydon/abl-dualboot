@@ -1,6 +1,6 @@
 {
-  "name": "boot-switch",
-  "version": "1.2.0",
+  "name": "abl-dualboot",
+  "version": "2.0.0",
   "description": "Reboot to Android on handhelds that use the ROCKNIX ABL",
   "type": "module",
   "scripts": {
@@ -9,7 +9,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kingsleydon/rocknix-bootswitch.git"
+    "url": "git+https://github.com/kingsleydon/abl-dualboot.git"
   },
   "author": "kingsleydon",
   "license": "MIT",
