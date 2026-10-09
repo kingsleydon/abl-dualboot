@@ -15,14 +15,14 @@ env:
 
 jobs:
   android:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 17
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: 8.11.1
       - name: Decode signing key
@@ -36,15 +36,15 @@ jobs:
         run: |
           gradle :app:assembleRelease --no-daemon
           mkdir -p ../out && cp app/build/outputs/apk/release/app-release.apk ../out/BootSwitch.apk
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: android
           path: out/
 
   packages:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: KernelSU module - Boot to Linux
         run: |
           mkdir -p out
@@ -62,7 +62,7 @@ jobs:
           (cd pkg && zip -rX ../out/boot-switch-decky.zip boot-switch)
       - name: Linux scripts
         run: (cd linux && zip -X ../out/bootswitch-linux.zip *)
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: packages
           path: out/
@@ -70,9 +70,9 @@ jobs:
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [android, packages]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: out
           merge-multiple: true
