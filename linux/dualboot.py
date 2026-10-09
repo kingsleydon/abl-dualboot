@@ -23,6 +23,11 @@ class SwitchError(Exception):
     pass
 
 
+def _read(path):
+    with open(path) as f:
+        return f.read()
+
+
 def check(d):
     ok = (d[:13] == b"ANDROID-BOOT!"
           and d[0xA54:0xA62] == b"\x01\x00\x08\x00\x01\x00BootMode"
@@ -37,14 +42,14 @@ def internal_part():
     (by Armada/ROCKNIX) lives there."""
     ud = os.path.basename(os.path.realpath("/dev/disk/by-partlabel/userdata"))
     try:
-        n = int(open(f"/sys/class/block/{ud}/partition").read())
+        n = int(_read(f"/sys/class/block/{ud}/partition"))
     except OSError:
         return None
     disk = os.path.basename(os.path.realpath(f"/sys/class/block/{ud}/.."))
     after = []
     for p in os.listdir(f"/sys/class/block/{disk}"):
         try:
-            pn = int(open(f"/sys/class/block/{disk}/{p}/partition").read())
+            pn = int(_read(f"/sys/class/block/{disk}/{p}/partition"))
         except (OSError, ValueError):
             continue
         if pn > n:
@@ -76,7 +81,7 @@ def os_name(part):
     """Friendly OS name from a partition's GPT name or FAT label."""
     label = ""
     try:
-        for line in open(f"/sys/class/block/{part}/uevent"):
+        for line in _read(f"/sys/class/block/{part}/uevent").splitlines():
             if line.startswith("PARTNAME="):
                 label = line.split("=", 1)[1].strip()
     except OSError:
@@ -94,7 +99,7 @@ def sd_card():
         d = f"/sys/class/block/{name}"
         if name.startswith("mmcblk") and not os.path.exists(f"{d}/partition"):
             try:
-                if open(f"{d}/device/type").read().strip() == "SD":
+                if _read(f"{d}/device/type").strip() == "SD":
                     return name
             except OSError:
                 pass

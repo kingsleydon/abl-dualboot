@@ -26,7 +26,7 @@ class AblReleaseTest {
         return ByteArrayOutputStream().also { out -> GZIPOutputStream(out).use { it.write(tar.toByteArray()) } }.toByteArray()
     }
 
-    private fun release(elfSha: String = AblRelease.sha256(elf)) = archive(
+    private fun release(elfSha: String = sha256(elf)) = archive(
         mapOf(
             "rocknix-abl-v1.2/abl_signed-SM8550.elf" to elf,
             "rocknix-abl-v1.2/abl_signed-SM8550.elf.sha256" to "$elfSha  abl_signed-SM8550.elf\n".toByteArray(),
@@ -35,7 +35,7 @@ class AblReleaseTest {
 
     @Test fun extractsVerifiedElf() {
         val a = release()
-        assertArrayEquals(elf, AblRelease.extract(a, "SM8550", AblRelease.sha256(a)))
+        assertArrayEquals(elf, AblRelease.extract(a, "SM8550", sha256(a)))
     }
 
     @Test fun rejectsArchiveWithWrongPinnedChecksum() {
@@ -44,11 +44,11 @@ class AblReleaseTest {
 
     @Test fun rejectsElfWithWrongChecksum() {
         val a = release(elfSha = "f".repeat(64))
-        assertThrows(AblRelease.VerificationException::class.java) { AblRelease.extract(a, "SM8550", AblRelease.sha256(a)) }
+        assertThrows(AblRelease.VerificationException::class.java) { AblRelease.extract(a, "SM8550", sha256(a)) }
     }
 
     @Test fun rejectsUnknownSoc() {
         val a = release()
-        assertThrows(AblRelease.VerificationException::class.java) { AblRelease.extract(a, "SM9999", AblRelease.sha256(a)) }
+        assertThrows(AblRelease.VerificationException::class.java) { AblRelease.extract(a, "SM9999", sha256(a)) }
     }
 }

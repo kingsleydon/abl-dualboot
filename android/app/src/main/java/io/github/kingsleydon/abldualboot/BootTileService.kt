@@ -7,7 +7,7 @@ import android.service.quicksettings.TileService
 
 class BootTileService : TileService() {
     override fun onStartListening() {
-        val last = Settings.lastTarget(this)
+        val last = Prefs.lastTarget(this)
         qsTile?.apply {
             state = Tile.STATE_INACTIVE
             label = last?.title ?: getString(R.string.tile_label)

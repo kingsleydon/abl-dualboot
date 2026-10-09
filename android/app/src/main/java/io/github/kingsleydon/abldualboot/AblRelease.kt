@@ -1,9 +1,6 @@
 package io.github.kingsleydon.abldualboot
 
 import java.io.ByteArrayInputStream
-import java.net.HttpURLConnection
-import java.net.URL
-import java.security.MessageDigest
 import java.util.zip.GZIPInputStream
 
 /**
@@ -17,14 +14,7 @@ object AblRelease {
 
     class VerificationException(message: String) : Exception(message)
 
-    fun sha256(bytes: ByteArray): String =
-        MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
-
-    fun download(): ByteArray = (URL(url).openConnection() as HttpURLConnection).run {
-        connectTimeout = 15_000
-        readTimeout = 60_000
-        inputStream.use { it.readBytes() }
-    }
+    fun download(): ByteArray = httpGet(url).inputStream.use { it.readBytes() }
 
     /** Returns the verified ABL ELF for [soc] (e.g. SM8550) from a downloaded release archive. */
     fun extract(archive: ByteArray, soc: String, archiveSha256: String = BuildConfig.ABL_TARBALL_SHA256): ByteArray {

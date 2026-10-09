@@ -1,6 +1,7 @@
 package io.github.kingsleydon.abldualboot
 
 import android.content.Context
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -13,7 +14,7 @@ data class Target(val location: String, val name: String) {
     val title get() = if (location == "usb") "Linux on USB" else name
 }
 
-data class AblStatus(val soc: String, val currentSlot: String, val slotA: AblKind, val slotB: AblKind) {
+data class AblStatus(val soc: String, val slotA: AblKind, val slotB: AblKind) {
     val supported get() = soc != "unknown"
     val installed get() = slotA == AblKind.ROCKNIX && slotB == AblKind.ROCKNIX
     /** One slot still has ROCKNIX but the other does not: a system update replaced it. */
@@ -42,7 +43,7 @@ object Device {
             },
             targets = targets(context),
             abl = ablStatus(context),
-            error = if (status.ok) null else status.output.removePrefix("! "),
+            error = if (status.ok) null else status.error,
         )
     }
 
@@ -55,14 +56,14 @@ object Device {
         val out = Root.run("sh '${Root.asset(context, "abl.sh")}' status").output
         val f = out.split(" ").mapNotNull { it.split("=").takeIf { kv -> kv.size == 2 }?.let { kv -> kv[0] to kv[1] } }.toMap()
         fun kind(v: String?) = when (v) { "rocknix" -> AblKind.ROCKNIX; "stock" -> AblKind.STOCK; else -> AblKind.UNKNOWN }
-        return AblStatus(f["soc"] ?: "unknown", f["slot"] ?: "?", kind(f["a"]), kind(f["b"]))
+        return AblStatus(f["soc"] ?: "unknown", kind(f["a"]), kind(f["b"]))
     }
 
     /** Sets the target as default boot and restarts. Returns an error message, or null on success. */
     suspend fun reboot(context: Context, target: Target): String? = withContext(Dispatchers.IO) {
         val r = dualboot(context, "linux ${target.location}")
-        if (!r.ok) return@withContext r.output.removePrefix("! ").ifBlank { "Root access denied" }
-        Settings.setLastTarget(context, target)
+        if (!r.ok) return@withContext r.error
+        Prefs.setLastTarget(context, target)
         Root.run("reboot")
         null
     }
@@ -77,9 +78,9 @@ object Device {
         } catch (e: Exception) {
             return@withContext Root.Result(false, e.message ?: "Could not download the ROCKNIX ABL")
         }
-        val file = java.io.File(context.filesDir, "abl_signed-$soc.elf").apply { writeBytes(elf) }
+        val file = File(context.filesDir, "abl_signed-$soc.elf").apply { writeBytes(elf) }
         try {
-            Root.run("sh '${Root.asset(context, "abl.sh")}' flash '${file.absolutePath}' ${AblRelease.sha256(elf)} $BACKUP_DIR")
+            Root.run("sh '${Root.asset(context, "abl.sh")}' flash '${file.absolutePath}' ${sha256(elf)} $BACKUP_DIR")
         } finally {
             file.delete()
         }

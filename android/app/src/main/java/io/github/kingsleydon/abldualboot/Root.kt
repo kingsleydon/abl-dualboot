@@ -7,12 +7,17 @@ import java.io.File
 
 /** Root access through libsu, which works with any su provider (Magisk, KernelSU and forks, APatch). */
 object Root {
-    data class Result(val ok: Boolean, val output: String)
+    data class Result(val ok: Boolean, val output: String) {
+        /** Script output without the "! " prefix the device scripts put on errors. */
+        val error: String get() = output.removePrefix("! ").ifBlank { "Root access denied" }
+    }
 
     fun run(command: String): Result {
         if (!available()) return Result(false, "")
-        val r = Shell.cmd(command).exec()
-        return Result(r.isSuccess, r.out.joinToString("\n").trim())
+        // Scripts report errors on stderr; collect both streams in order, as the user sees them.
+        val output = ArrayList<String>()
+        val r = Shell.cmd(command).to(output, output).exec()
+        return Result(r.isSuccess, output.joinToString("\n").trim())
     }
 
     fun available(): Boolean = Shell.getShell().isRoot

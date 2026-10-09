@@ -3,7 +3,6 @@ package io.github.kingsleydon.abldualboot
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,8 +18,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,11 +40,7 @@ import kotlinx.coroutines.withContext
 class ChooserActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            val context = LocalContext.current
-            val colors = if (isSystemInDarkTheme()) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-            MaterialTheme(colorScheme = colors) { Chooser(onDone = ::finish) }
-        }
+        setContent { AppTheme { Chooser(onDone = ::finish) } }
     }
 }
 
@@ -63,7 +56,7 @@ private fun Chooser(onDone: () -> Unit) {
     LaunchedEffect(Unit) {
         val found = withContext(Dispatchers.IO) { if (Root.available()) Device.targets(context) else emptyList() }
         if (found.isEmpty()) error = Root.NO_ROOT
-        val last = Settings.lastTarget(context)
+        val last = Prefs.lastTarget(context)
         targets = found
         selected = found.firstOrNull { it.location == last?.location } ?: found.firstOrNull()
     }

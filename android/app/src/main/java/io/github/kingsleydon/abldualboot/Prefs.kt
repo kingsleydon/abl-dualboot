@@ -3,13 +3,13 @@ package io.github.kingsleydon.abldualboot
 import android.content.Context
 
 /** Small app preferences: the last Linux destination (offered first by the tile) and auto-update. */
-object Settings {
+object Prefs {
     private fun prefs(context: Context) = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
     fun lastTarget(context: Context): Target? {
         val p = prefs(context)
         val location = p.getString("last_location", null) ?: return null
-        return Target(location, p.getString("last_name", "Linux")!!)
+        return Target(location, p.getString("last_name", null) ?: "Linux")
     }
 
     /** Written synchronously: the device restarts right after this. */
