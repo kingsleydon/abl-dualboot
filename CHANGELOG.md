@@ -3,7 +3,7 @@
 ## v1.2.0
 - Pick any Linux system to restart into: internal storage, SD card or USB, shown by name (Armada, ROCKNIX, Batocera, ...).
 - App redesigned around "Restart into"; bootloader card only appears when something needs fixing.
-- Quick Settings tile shows the last system used and lets you choose.
+- Quick Settings tile shows the last system used and opens a Material 3 chooser.
 - Decky plugin: restart into Android or another Linux system.
 
 ## v1.1.1

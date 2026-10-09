@@ -9,6 +9,14 @@ Works with any Linux that boots through the ROCKNIX ABL (Armada, ROCKNIX, Batoce
 from an **SD card or internal storage**, and with every common root solution: **Magisk, KernelSU,
 KernelSU Next, SukiSU, APatch**.
 
+## Screenshots
+
+| Android app | Quick Settings tile |
+|---|---|
+| ![Boot Switch app: restart into Armada or Linux on USB](docs/screenshot-app.png) | ![Tile chooser](docs/screenshot-tile.png) |
+| **Confirm** | **Linux (Steam Game Mode, Decky)** |
+| ![Restart into Armada?](docs/screenshot-restart.png) | ![Decky plugin: restart into Android](docs/screenshot-decky.png) |
+
 ## Quick start
 
 **1. Android:** install [`BootSwitch.apk`](../../releases/latest/download/BootSwitch.apk) and open it.
