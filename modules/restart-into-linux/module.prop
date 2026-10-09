@@ -1,0 +1,7 @@
+id=abl_dualboot_restart_into_linux
+name=ABL Dual Boot: Restart into Linux
+version=v1.0
+versionCode=1
+author=kingsleydon
+description=Tap Action to restart into Linux (internal storage if installed there, otherwise SD card) on handhelds with the ROCKNIX ABL.
+updateJson=https://github.com/kingsleydon/abl-dualboot/releases/latest/download/abl-dualboot-module-restart-into-linux.json

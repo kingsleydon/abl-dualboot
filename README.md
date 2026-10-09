@@ -59,8 +59,8 @@ and Android only accepts an update signed with the same key.
 
 | File | For |
 |---|---|
-| `boot-to-linux-module.zip` | The switch as a Magisk / KernelSU / APatch module (Modules → Action) |
-| `abl-reflash-module.zip` | ROCKNIX ABL restore as a module (Modules → Action, after updates) |
+| `abl-dualboot-module-restart-into-linux.zip` | Restart into Linux as a Magisk / KernelSU / APatch module (Modules → Action) |
+| `abl-dualboot-module-restore-abl.zip` | Restore the ROCKNIX ABL after Android updates, as a module (Modules → Action) |
 | `abl-dualboot-decky.zip` | Decky plugin only (the installer already adds it) |
 | `abl-dualboot-linux.zip` | `dualboot.py` + desktop launcher, for manual installs |
 

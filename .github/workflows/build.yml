@@ -124,16 +124,16 @@ jobs:
       - name: Magisk / KernelSU / APatch modules
         run: |
           mkdir -p out
-          cp shared/dualboot.sh modules/boot-to-linux/
-          cp shared/abl.sh modules/abl-reflash/ && cp -r abl modules/abl-reflash/abl
-          for m in boot-to-linux abl-reflash; do
+          cp shared/dualboot.sh modules/restart-into-linux/
+          cp shared/abl.sh modules/restore-abl/ && cp -r abl modules/restore-abl/abl
+          for m in restart-into-linux restore-abl; do
             sed -i "s/^version=.*/version=v$VERSION_NAME/; s/^versionCode=.*/versionCode=$VERSION_CODE/" modules/$m/module.prop
             cp -r modules/_magisk/META-INF modules/$m/
-            (cd modules/$m && zip -rX ../../out/$m-module.zip .)
+            (cd modules/$m && zip -rX ../../out/abl-dualboot-module-$m.zip .)
             jq -n --arg v "v$VERSION_NAME" --argjson c "$VERSION_CODE" \
-              --arg zip "https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION_NAME/$m-module.zip" \
+              --arg zip "https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION_NAME/abl-dualboot-module-$m.zip" \
               --arg log "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/main/CHANGELOG.md" \
-              '{version: $v, versionCode: $c, zipUrl: $zip, changelog: $log}' > out/$m-module.json
+              '{version: $v, versionCode: $c, zipUrl: $zip, changelog: $log}' > out/abl-dualboot-module-$m.json
           done
       - name: Linux scripts
         run: |
