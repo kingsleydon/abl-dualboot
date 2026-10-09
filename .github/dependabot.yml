@@ -12,3 +12,7 @@ updates:
     directory: /decky
     schedule: { interval: monthly }
     groups: { decky: { patterns: ["*"] } }
+    ignore:
+      # Stay on the TypeScript major used by decky-plugin-template
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
