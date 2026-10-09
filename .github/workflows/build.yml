@@ -83,6 +83,8 @@ jobs:
   decky:
     needs: version
     runs-on: ubuntu-24.04
+    env:
+      VERSION_NAME: ${{ needs.version.outputs.name }}
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -102,7 +104,9 @@ jobs:
         run: |
           P=pkg/abl-dualboot; mkdir -p $P/dist
           cp decky/dist/index.js $P/dist/
-          cp decky/package.json decky/plugin.json decky/main.py decky/LICENSE linux/dualboot.py $P/
+          cp decky/plugin.json decky/main.py decky/LICENSE linux/dualboot.py $P/
+          # Decky shows and compares the package.json version, so it must match the release tag
+          jq --arg v "$VERSION_NAME" '.version = $v' decky/package.json > $P/package.json
           mkdir -p out && (cd pkg && zip -rX ../out/abl-dualboot-decky.zip abl-dualboot)
       - uses: actions/upload-artifact@v7
         with:
