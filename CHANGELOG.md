@@ -1,5 +1,8 @@
 # Changelog
 
+## v2.2.1
+- Internal cleanup, no behavior change: shared helpers, no deprecated APIs, no compiler warnings.
+
 ## v2.2.0
 - Removed the Magisk/KernelSU/APatch modules; the app does both jobs (restart into Linux, restore the bootloader). The project no longer ships any ROCKNIX binary.
 
