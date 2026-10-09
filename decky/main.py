@@ -1,32 +1,31 @@
 import asyncio
+import importlib.util
 import os
 import subprocess
-import sys
 
 import decky
 
-SCRIPT = os.path.join(decky.DECKY_PLUGIN_DIR, "bootswitch.py")
-
-
-def _run(*args):
-    return subprocess.run([sys.executable, SCRIPT, *args], capture_output=True, text=True)
+# Decky runs plugins inside its own bundled Python, so import the switch code instead of spawning sys.executable.
+_spec = importlib.util.spec_from_file_location("bootswitch", os.path.join(decky.DECKY_PLUGIN_DIR, "bootswitch.py"))
+bootswitch = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(bootswitch)
 
 
 class Plugin:
     async def get_status(self) -> str:
-        r = await asyncio.to_thread(_run, "status")
-        if r.returncode != 0:
-            decky.logger.warning("status failed: %s", r.stderr.strip())
+        try:
+            return await asyncio.to_thread(bootswitch.status)
+        except Exception as e:
+            decky.logger.warning("status failed: %s", e)
             return "unknown"
-        return r.stdout.strip()
 
     async def reboot_to_android(self) -> dict:
-        r = await asyncio.to_thread(_run, "android", "--no-reboot")
-        if r.returncode != 0:
-            error = (r.stderr or r.stdout).strip().removeprefix("! ")
-            decky.logger.error("switch failed: %s", error)
-            return {"ok": False, "error": error}
-        decky.logger.info("default boot set to android, rebooting")
+        try:
+            result = await asyncio.to_thread(bootswitch.switch, "android")
+        except Exception as e:
+            decky.logger.error("switch failed: %s", e)
+            return {"ok": False, "error": str(e)}
+        decky.logger.info("default boot set to %s, rebooting", result)
         subprocess.Popen(["systemctl", "reboot"])
         return {"ok": True}
 

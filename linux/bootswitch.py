@@ -17,8 +17,8 @@ BOOT_MODE, BOOT_SOURCE = 0xA92, 0xAF0
 SOURCES = {0: "internal", 1: "auto", 2: "usb", 3: "sd"}
 
 
-def fail(msg):
-    sys.exit(f"! {msg}")
+class SwitchError(Exception):
+    pass
 
 
 def check(d):
@@ -27,7 +27,7 @@ def check(d):
           and d[0xAB2:0xAC6] == b"\x01\x00\x0e\x00\x01\x00BootSourceMode"
           and d[BOOT_MODE] in (0, 1))
     if not ok:
-        fail("devinfo layout not recognised - nothing written")
+        raise SwitchError("devinfo layout not recognised - nothing written")
 
 
 def internal_linux():
@@ -47,31 +47,34 @@ def internal_linux():
     return False
 
 
-def main():
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    cmd = args[0] if args else ""
-    with open(DEV, "r+b" if cmd in ("android", "linux") else "rb", buffering=0) as f:
+def _linux_source(d):
+    return d[BOOT_SOURCE] or (0 if internal_linux() else 3)
+
+
+def status():
+    """Returns e.g. "android sd" (default boot, then where Linux boots from)."""
+    with open(DEV, "rb", buffering=0) as f:
+        d = f.read(4096)
+    check(d)
+    if d[BOOT_MODE] == 1:
+        return f"android {SOURCES.get(_linux_source(d), 'unknown')}"
+    return f"linux {SOURCES.get(d[BOOT_SOURCE], 'unknown')}"
+
+
+def switch(target, location=""):
+    """Sets the default boot target the way the ABL menu does. Returns e.g. "android internal"."""
+    overrides = {"sd": 3, "internal": 0, "usb": 2}
+    if target not in ("android", "linux"):
+        raise SwitchError("target must be android or linux")
+    if location and location not in overrides:
+        raise SwitchError("location must be sd, internal or usb")
+    with open(DEV, "r+b", buffering=0) as f:
         before = f.read(4096)
         check(before)
-        cur_source = before[BOOT_SOURCE]
-        linux_source = cur_source or (0 if internal_linux() else 3)
-        if cmd == "status":
-            if before[BOOT_MODE] == 1:
-                print("android", SOURCES.get(linux_source, "unknown"))
-            else:
-                print("linux", SOURCES.get(cur_source, "unknown"))
-            return
-        if cmd == "android":
+        if target == "android":
             mode, source = 1, 0
-        elif cmd == "linux":
-            location = args[1] if len(args) > 1 else ""
-            overrides = {"sd": 3, "internal": 0, "usb": 2}
-            if location and location not in overrides:
-                fail("location must be sd, internal or usb")
-            mode, source = 0, overrides.get(location, linux_source)
         else:
-            fail("usage: bootswitch.py status | android | linux [sd|internal|usb] [--no-reboot]")
-
+            mode, source = 0, overrides.get(location, _linux_source(before))
         if (before[BOOT_MODE], before[BOOT_SOURCE]) != (mode, source):
             f.seek(BOOT_MODE); f.write(bytes([mode]))
             f.seek(BOOT_SOURCE); f.write(bytes([source]))
@@ -81,8 +84,22 @@ def main():
         changed = {i for i in range(4096) if before[i] != after[i]}
         if not changed <= {BOOT_MODE, BOOT_SOURCE} or (after[BOOT_MODE], after[BOOT_SOURCE]) != (mode, source):
             f.seek(0); f.write(before); os.fsync(f.fileno())
-            fail("verification failed - original devinfo restored, not rebooting")
-    print(f"{cmd} {SOURCES.get(source, 'unknown')} ok")
+            raise SwitchError("verification failed - original devinfo restored")
+    return f"{target} {SOURCES.get(source, 'unknown')}"
+
+
+def main():
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    cmd = args[0] if args else ""
+    try:
+        if cmd == "status":
+            print(status())
+            return
+        if cmd not in ("android", "linux"):
+            raise SwitchError("usage: bootswitch.py status | android | linux [sd|internal|usb] [--no-reboot]")
+        print(switch(cmd, args[1] if len(args) > 1 else "") + " ok")
+    except SwitchError as e:
+        sys.exit(f"! {e}")
     if "--no-reboot" not in sys.argv:
         subprocess.run(["systemctl", "reboot"])
 
