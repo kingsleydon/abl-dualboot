@@ -28,7 +28,7 @@ jobs:
             IFS=. read -r major minor patch <<< "$name"
             code=$((major * 10000 + minor * 100 + patch))
           else
-            name="0.0.0-dev.$GITHUB_RUN_NUMBER"; code=1
+            name="0.0.0-dev.$GITHUB_RUN_NUMBER"; code=$GITHUB_RUN_NUMBER
           fi
           echo "name=$name" >> "$GITHUB_OUTPUT"; echo "code=$code" >> "$GITHUB_OUTPUT"
 
