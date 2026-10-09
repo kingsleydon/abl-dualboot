@@ -11,4 +11,4 @@
 
 <p><b>Requires root.</b> It writes the same two bytes in the devinfo partition that the ROCKNIX boot menu writes, verifies them, and restores the original on any mismatch. Tested on an AYN Odin 2 Portal (SM8550). The VOL- boot menu always remains as a fallback.</p>
 
-<p>The app bundles the official ROCKNIX ABL builds (checksum-verified) so it can restore the boot menu offline.</p>
+<p>The ROCKNIX ABL is not included in the app. When you choose Install or Restore, it downloads the official release from github.com/ROCKNIX/abl and checks it against a pinned checksum before flashing.</p>

@@ -21,7 +21,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           latest=$(gh api repos/ROCKNIX/abl/releases/latest -q .tag_name)
-          current=$(sed -n 's/^  ABL_VERSION: //p' .github/workflows/build.yml)
+          current=$(sed -n 's/^ABL_VERSION=//p' abl.properties)
           echo "pinned $current, latest $latest"
           [ "$latest" != "$current" ] || exit 0
           branch="abl/$latest"
@@ -30,7 +30,7 @@ jobs:
           curl -fsSL -o abl.tar.gz "https://github.com/ROCKNIX/abl/releases/download/$latest/rocknix-abl-$latest.tar.gz"
           tar -xzf abl.tar.gz && (cd "rocknix-abl-$latest" && sha256sum -c *.sha256)
           sha=$(sha256sum abl.tar.gz | cut -d' ' -f1)
-          sed -i "s/^  ABL_VERSION: .*/  ABL_VERSION: $latest/; s/^  ABL_TARBALL_SHA256: .*/  ABL_TARBALL_SHA256: $sha/" .github/workflows/build.yml
+          sed -i "s/^ABL_VERSION=.*/ABL_VERSION=$latest/; s/^ABL_TARBALL_SHA256=.*/ABL_TARBALL_SHA256=$sha/" abl.properties
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -39,4 +39,4 @@ jobs:
           git push origin "$branch"
           gh pr create --head "$branch" --title "Bundle ROCKNIX ABL $latest" --body "ROCKNIX released [ABL $latest](https://github.com/ROCKNIX/abl/releases/tag/$latest).
 
-          This pins the new tarball (SHA-256 \`$sha\`; per-file checksums verified). Test the bootloader install/restore on a device before merging."
+          This pins the new tarball in \`abl.properties\` (SHA-256 \`$sha\`; per-file checksums verified). Test the bootloader install/restore on a device before merging."

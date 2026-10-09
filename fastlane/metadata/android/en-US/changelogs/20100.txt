@@ -1,0 +1,1 @@
+- The app no longer bundles the ROCKNIX ABL; Install/Restore downloads the official release and verifies it against a pinned checksum.

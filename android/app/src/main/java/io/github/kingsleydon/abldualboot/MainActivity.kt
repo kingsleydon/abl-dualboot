@@ -231,7 +231,8 @@ private fun App(onAddTile: () -> Unit) {
                 Text(
                     (if (d.restore) "A system update replaced the ROCKNIX bootloader (${d.soc}). This puts it back."
                     else "Replaces your device's bootloader with the ROCKNIX ABL for ${d.soc}. A wrong or interrupted flash can leave the device unbootable.") +
-                        "\n\nYour stock bootloader is backed up to ${Device.BACKUP_DIR} first, and every write is verified.",
+                        "\n\nThis downloads ROCKNIX ABL ${AblRelease.version} (about 1.4 MB) from github.com/ROCKNIX/abl and checks it against a pinned checksum. " +
+                        "Your stock bootloader is backed up to ${Device.BACKUP_DIR} first, and every write is verified.",
                 )
             },
             confirmButton = {

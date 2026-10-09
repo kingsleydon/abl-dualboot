@@ -111,8 +111,9 @@ their `qtestsign` signing certificate (the stock ABL is Qualcomm-signed), so a n
 - `modules/`: [Magisk module format](https://topjohnwu.github.io/Magisk/guides.html), also understood by KernelSU and APatch
 - `shared/`: the device scripts used by both the app and the modules
 
-GitHub Actions builds everything; pushing a `v*` tag publishes a release. The ROCKNIX ABL binaries are not stored
-here. CI downloads the official release and checks it against a pinned SHA-256.
+GitHub Actions builds everything; pushing a `v*` tag publishes a release. The ROCKNIX ABL is not stored here or
+bundled in the app: the app downloads the official release only when you install or restore the bootloader, and
+checks it against the SHA-256 pinned in `abl.properties` (the restore module bundles the same verified files).
 
 ## Verify a download
 

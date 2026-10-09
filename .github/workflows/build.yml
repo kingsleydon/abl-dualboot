@@ -10,9 +10,6 @@ on:
 permissions:
   contents: read
 
-env:
-  ABL_VERSION: v1.2
-  ABL_TARBALL_SHA256: 64034fb076ea0bb858beaa2f29dbef635e97d29f3e3d32c13bce61bd4af4cff7
 
 jobs:
   version:
@@ -35,8 +32,10 @@ jobs:
   abl:
     runs-on: ubuntu-24.04
     steps:
-      - name: Download ROCKNIX ABL (official release, checksum pinned)
+      - uses: actions/checkout@v7
+      - name: Download ROCKNIX ABL (official release, checksum pinned in abl.properties)
         run: |
+          . ./abl.properties
           curl -fsSL -o abl.tar.gz "https://github.com/ROCKNIX/abl/releases/download/$ABL_VERSION/rocknix-abl-$ABL_VERSION.tar.gz"
           echo "$ABL_TARBALL_SHA256  abl.tar.gz" | sha256sum -c
           tar -xzf abl.tar.gz
@@ -48,14 +47,10 @@ jobs:
           path: abl/
 
   android:
-    needs: [version, abl]
+    needs: version
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
-        with:
-          name: abl
-          path: android/app/abl-assets/abl
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -73,7 +68,7 @@ jobs:
           VERSION_NAME: ${{ needs.version.outputs.name }}
           VERSION_CODE: ${{ needs.version.outputs.code }}
         run: |
-          ./gradlew :app:assembleRelease
+          ./gradlew :app:testDebugUnitTest :app:assembleRelease
           mkdir -p ../out && cp app/build/outputs/apk/release/*.apk ../out/ABL-Dual-Boot.apk
       - uses: actions/upload-artifact@v7
         with:

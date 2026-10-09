@@ -5,4 +5,3 @@ local.properties
 *.keystore
 .idea/
 scripts/rocknix-abl-*/
-android/app/abl-assets/

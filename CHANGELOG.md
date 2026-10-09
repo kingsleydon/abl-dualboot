@@ -1,5 +1,8 @@
 # Changelog
 
+## v2.1.0
+- The app no longer bundles the ROCKNIX ABL. Install/Restore downloads the official release from github.com/ROCKNIX/abl and verifies it against a pinned checksum.
+
 ## v2.0.3
 - The built-in updater turns off when an app store (F-Droid, IzzyOnDroid, Obtainium) installed the app; the store handles updates.
 - Fastlane metadata for F-Droid-compatible repositories.

@@ -67,13 +67,21 @@ object Device {
         null
     }
 
-    /** Flashes the bundled ROCKNIX ABL for this SoC to both slots. Returns the script log; ok=false on failure. */
+    /**
+     * Downloads the official ROCKNIX ABL for this SoC, verifies it and flashes it to both slots.
+     * Returns the script log; ok=false on failure.
+     */
     suspend fun installAbl(context: Context, soc: String): Root.Result = withContext(Dispatchers.IO) {
-        val name = "abl/abl_signed-$soc.elf"
-        val elf = try { Root.asset(context, name) } catch (e: Exception) {
-            return@withContext Root.Result(false, "No ROCKNIX ABL bundled for $soc")
+        val elf = try {
+            AblRelease.extract(AblRelease.download(), soc)
+        } catch (e: Exception) {
+            return@withContext Root.Result(false, e.message ?: "Could not download the ROCKNIX ABL")
         }
-        val sha = context.assets.open("$name.sha256").bufferedReader().readText().substringBefore(" ").trim()
-        Root.run("sh '${Root.asset(context, "abl.sh")}' flash '$elf' $sha $BACKUP_DIR")
+        val file = java.io.File(context.filesDir, "abl_signed-$soc.elf").apply { writeBytes(elf) }
+        try {
+            Root.run("sh '${Root.asset(context, "abl.sh")}' flash '${file.absolutePath}' ${AblRelease.sha256(elf)} $BACKUP_DIR")
+        } finally {
+            file.delete()
+        }
     }
 }
