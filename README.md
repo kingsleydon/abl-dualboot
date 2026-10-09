@@ -65,7 +65,9 @@ Boot Switch does exactly what the menu's **Switch boot mode** does:
 - **Android → Linux:** `BootMode=0`. If `BootSourceMode` is `0` and no Linux is installed internally, `BootSourceMode=3` (SD card).
   "Installed internally" means partitions follow `userdata` on the same disk, which is how Armada/ROCKNIX install to internal storage.
 
-So Linux on an **SD card or internal storage** both work without any setting. ROCKNIX ABL builds are recognised by
+So Linux on an **SD card or internal storage** both work without any setting. If detection ever picks the wrong
+place, set **Linux location** in the app (Automatic / SD card / Internal storage / USB), or pass it on Linux:
+`bootswitch.py linux sd`. ROCKNIX ABL builds are recognised by
 their `qtestsign` signing certificate (the stock ABL is Qualcomm-signed), so a newer ROCKNIX ABL is never mistaken for stock.
 
 ## Build

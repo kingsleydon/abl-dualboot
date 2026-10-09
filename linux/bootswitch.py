@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # Read or set the ROCKNIX ABL default boot target stored in devinfo, then reboot.
-# Usage: bootswitch.py status | android | linux   (add --no-reboot to skip the reboot)
+# Usage: bootswitch.py status | android | linux [sd|internal|usb]   (add --no-reboot to skip the reboot)
+#   linux without a location picks it like the ABL menu does (below); a location overrides that.
 #
 # Mirrors "Switch boot mode" in the ROCKNIX ABL v1.2 menu (LinuxLoader):
 #   BootMode       (0xA92): 0 = Linux, 1 = Android
@@ -63,9 +64,13 @@ def main():
         if cmd == "android":
             mode, source = 1, 0
         elif cmd == "linux":
-            mode, source = 0, linux_source
+            location = args[1] if len(args) > 1 else ""
+            overrides = {"sd": 3, "internal": 0, "usb": 2}
+            if location and location not in overrides:
+                fail("location must be sd, internal or usb")
+            mode, source = 0, overrides.get(location, linux_source)
         else:
-            fail("usage: bootswitch.py status | android | linux [--no-reboot]")
+            fail("usage: bootswitch.py status | android | linux [sd|internal|usb] [--no-reboot]")
 
         if (before[BOOT_MODE], before[BOOT_SOURCE]) != (mode, source):
             f.seek(BOOT_MODE); f.write(bytes([mode]))

@@ -10,6 +10,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.ui.semantics.Role
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.ListItem
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -101,6 +107,8 @@ private fun App(onAddTile: () -> Unit) {
     var dialog by remember { mutableStateOf<Dialog?>(null) }
     var busy by remember { mutableStateOf(false) }
     var log by remember { mutableStateOf<String?>(null) }
+    var location by remember { mutableStateOf(Settings.linuxLocation(context)) }
+    var pickingLocation by remember { mutableStateOf(false) }
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     fun refresh() = scope.launch { state = DeviceState.Loading; state = Device.load(context) }
@@ -125,9 +133,10 @@ private fun App(onAddTile: () -> Unit) {
                     DeviceState.Loading -> Box(Modifier.fillMaxWidth().padding(48.dp), Alignment.Center) { CircularProgressIndicator() }
                     is DeviceState.NoRoot -> NoRootCard(s.manager) { Root.retry(); refresh() }
                     is DeviceState.Ready -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        BootCard(s)
+                        BootCard(s, location)
                         BootloaderCard(s.abl) { restore -> dialog = Dialog.InstallAbl(s.abl.soc, restore) }
                         log?.let { LogCard(it) }
+                        LocationCard(location) { pickingLocation = true }
                         Button(
                             onClick = { dialog = Dialog.Reboot },
                             enabled = s.abl.installed && !busy,
@@ -147,6 +156,14 @@ private fun App(onAddTile: () -> Unit) {
                 }
             }
         }
+    }
+
+    if (pickingLocation) {
+        LocationDialog(
+            selected = location,
+            onSelect = { location = it; Settings.setLinuxLocation(context, it); pickingLocation = false },
+            onDismiss = { pickingLocation = false },
+        )
     }
 
     when (val d = dialog) {
@@ -201,7 +218,8 @@ private fun StatusRow(icon: ImageVector?, tint: Color, label: String, value: Str
 }
 
 @Composable
-private fun BootCard(s: DeviceState.Ready) {
+private fun BootCard(s: DeviceState.Ready, location: LinuxLocation) {
+    val from = if (location == LinuxLocation.AUTOMATIC) s.source.label else location.label.lowercase()
     ElevatedCard(Modifier.fillMaxWidth()) {
         Box(Modifier.padding(20.dp)) {
             StatusRow(
@@ -213,7 +231,7 @@ private fun BootCard(s: DeviceState.Ready) {
                     BootTarget.LINUX -> "Linux"
                     BootTarget.UNKNOWN -> "Unknown"
                 },
-                detail = s.switchError ?: "Linux boots from ${s.source.label}",
+                detail = s.switchError ?: "Linux boots from $from",
             )
         }
     }
@@ -246,6 +264,46 @@ private fun BootloaderCard(abl: AblStatus, onInstall: (restore: Boolean) -> Unit
             }
         }
     }
+}
+
+@Composable
+private fun LocationCard(location: LinuxLocation, onClick: () -> Unit) {
+    ElevatedCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        ListItem(
+            headlineContent = { Text("Linux location") },
+            supportingContent = { Text(location.label) },
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        )
+    }
+}
+
+@Composable
+private fun LocationDialog(selected: LinuxLocation, onSelect: (LinuxLocation) -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Linux location") },
+        text = {
+            Column(Modifier.selectableGroup()) {
+                LinuxLocation.entries.forEach { option ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .selectable(selected = option == selected, onClick = { onSelect(option) }, role = Role.RadioButton)
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = option == selected, onClick = null)
+                        Spacer(Modifier.size(16.dp))
+                        Column {
+                            Text(option.label, style = MaterialTheme.typography.bodyLarge)
+                            Text(option.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
 }
 
 @Composable

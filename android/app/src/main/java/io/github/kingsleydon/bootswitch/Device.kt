@@ -54,7 +54,8 @@ object Device {
 
     /** Sets Linux as default boot target and reboots. Returns an error message, or null on success. */
     suspend fun rebootToLinux(context: Context): String? = withContext(Dispatchers.IO) {
-        val r = Root.run("BOOTSWITCH_TMP='${context.cacheDir}' sh '${Root.asset(context, "bootswitch.sh")}' linux")
+        val location = Settings.linuxLocation(context).arg
+        val r = Root.run("BOOTSWITCH_TMP='${context.cacheDir}' sh '${Root.asset(context, "bootswitch.sh")}' linux $location")
         if (!r.ok) return@withContext r.output.removePrefix("! ").ifBlank { "Root access denied" }
         Root.run("reboot")
         null

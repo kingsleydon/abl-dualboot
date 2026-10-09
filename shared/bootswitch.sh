@@ -1,6 +1,7 @@
 #!/system/bin/sh
 # Read or set the ROCKNIX ABL default boot target stored in devinfo.
-# Usage: bootswitch.sh status | android | linux
+# Usage: bootswitch.sh status | android | linux [sd|internal|usb]
+#   linux without a location picks it like the ABL menu does (below); a location overrides that.
 # DEVINFO overrides the partition path (for testing on a copy).
 #
 # Mirrors "Switch boot mode" in the ROCKNIX ABL v1.2 menu (LinuxLoader):
@@ -43,8 +44,14 @@ case "$1" in
     [ "$MODE_CUR" = 01 ] && echo "android $(source_name $LINUX_SRC)" || echo "linux $(source_name $SRC_CUR)"
     exit 0 ;;
   android) MODE=01; SRC=00 ;;
-  linux)   MODE=00; SRC=$LINUX_SRC ;;
-  *) fail "usage: $0 status | android | linux" ;;
+  linux)
+    MODE=00
+    case "$2" in
+      "") SRC=$LINUX_SRC ;;
+      sd) SRC=03 ;; internal) SRC=00 ;; usb) SRC=02 ;;
+      *) fail "location must be sd, internal or usb" ;;
+    esac ;;
+  *) fail "usage: $0 status | android | linux [sd|internal|usb]" ;;
 esac
 
 BEFORE=$(sha256sum "$P" | cut -d' ' -f1)
