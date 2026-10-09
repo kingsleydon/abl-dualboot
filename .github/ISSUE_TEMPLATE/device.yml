@@ -1,0 +1,39 @@
+name: Device report
+description: Tell us Boot Switch works (or not) on your device
+labels: [device-report]
+body:
+  - type: input
+    id: device
+    attributes:
+      label: "Device"
+      placeholder: "Retroid Pocket 6"
+    validations:
+      required: true
+  - type: input
+    id: soc
+    attributes:
+      label: "Chip (SoC)"
+      placeholder: "SM8550"
+    validations:
+      required: true
+  - type: input
+    id: abl
+    attributes:
+      label: "ROCKNIX ABL version"
+      placeholder: "1.2"
+  - type: checkboxes
+    id: works
+    attributes:
+      label: "What works?"
+      options:
+        - label: Android → Linux (app or tile)
+        - label: Linux → Android (Decky plugin or launcher)
+        - label: Linux on SD card
+        - label: Linux on internal storage
+        - label: Linux on USB
+        - label: Restoring the ROCKNIX ABL after an Android update
+  - type: textarea
+    id: notes
+    attributes:
+      label: "Notes"
+      description: "ROM, Linux distro, root manager, anything unusual."

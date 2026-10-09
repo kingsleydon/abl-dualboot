@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: ROCKNIX ABL / bootloader menu problems
+    url: https://github.com/ROCKNIX/abl
+    about: Issues with the ROCKNIX ABL itself belong to the ROCKNIX project.

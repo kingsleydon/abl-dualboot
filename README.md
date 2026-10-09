@@ -90,6 +90,18 @@ their `qtestsign` signing certificate (the stock ABL is Qualcomm-signed), so a n
 GitHub Actions builds everything; pushing a `v*` tag publishes a release. The ROCKNIX ABL binaries are not stored
 here. CI downloads the official release and checks it against a pinned SHA-256.
 
+## Verify a download
+
+Every release file has a signed build attestation from GitHub Actions:
+
+```sh
+gh attestation verify BootSwitch.apk -R kingsleydon/rocknix-bootswitch
+```
+
+## Contributing
+
+Device reports are the most useful contribution. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## License
 
 MIT. ROCKNIX ABL is © the ROCKNIX team under its own terms. The Decky plugin is based on decky-plugin-template (BSD-3-Clause).

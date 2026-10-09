@@ -1,0 +1,44 @@
+name: Bug report
+description: Something doesn't work as described
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "If your device doesn't boot, hold **VOL-** at power-on to reach the ROCKNIX boot menu and switch back manually."
+  - type: input
+    id: device
+    attributes:
+      label: "Device"
+      placeholder: "AYN Odin 2 Portal"
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: "Where did it happen?"
+      options: [Android app, Quick Settings tile, Magisk/KernelSU/APatch module, Decky plugin, Linux command line / launcher]
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: "Versions"
+      description: "Boot Switch, Android ROM, Linux distro, root manager"
+      placeholder: "Boot Switch 1.2.0, LineageOS 23.2, Armada 20260926, KernelSU"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: "What happened?"
+      description: "What you did, what you expected, what happened instead."
+    validations:
+      required: true
+  - type: textarea
+    id: status
+    attributes:
+      label: "Status output"
+      description: |
+        Android: `su -c "sh /data/data/io.github.kingsleydon.bootswitch/files/bootswitch.sh status; sh /data/data/io.github.kingsleydon.bootswitch/files/bootswitch.sh targets"`
+        Linux: `sudo python3 /etc/bootswitch/bootswitch.py status; sudo python3 /etc/bootswitch/bootswitch.py targets`
+      render: text
