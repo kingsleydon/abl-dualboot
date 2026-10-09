@@ -9,39 +9,52 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class BootTileService : TileService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     override fun onStartListening() {
+        val last = Settings.lastTarget(this)
         qsTile?.apply {
             state = Tile.STATE_INACTIVE
-            label = getString(R.string.tile_label)
-            subtitle = null
+            label = last?.title ?: getString(R.string.tile_label)
+            subtitle = last?.where
             updateTile()
         }
     }
 
     override fun onClick() {
-        if (isLocked) unlockAndRun(::confirm) else confirm()
+        if (isLocked) unlockAndRun(::choose) else choose()
     }
 
-    private fun confirm() {
-        val dialog = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle(R.string.confirm_title)
-            .setMessage(R.string.confirm_body)
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.reboot) { _, _ ->
-                qsTile?.apply { state = Tile.STATE_ACTIVE; subtitle = "Rebooting…"; updateTile() }
-                scope.launch {
-                    Device.rebootToLinux(this@BootTileService)?.let { error ->
-                        Toast.makeText(this@BootTileService, error, Toast.LENGTH_LONG).show()
-                        onStartListening()
-                    }
-                }
+    private fun choose() {
+        scope.launch {
+            val targets = withContext(Dispatchers.IO) { if (Root.available()) Device.targets(this@BootTileService) else emptyList() }
+            if (targets.isEmpty()) {
+                Toast.makeText(this@BootTileService, Root.NO_ROOT, Toast.LENGTH_LONG).show()
+                return@launch
             }
-            .create()
-        showDialog(dialog)
+            val last = Settings.lastTarget(this@BootTileService)
+            var selected = targets.indexOfFirst { it.location == last?.location }.takeIf { it >= 0 } ?: 0
+            val dialog = AlertDialog.Builder(this@BootTileService, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle(R.string.choose_title)
+                .setSingleChoiceItems(targets.map { "${it.title} · ${it.where}" }.toTypedArray(), selected) { _, i -> selected = i }
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.restart) { _, _ -> restart(targets[selected]) }
+                .create()
+            showDialog(dialog)
+        }
+    }
+
+    private fun restart(target: Target) {
+        qsTile?.apply { state = Tile.STATE_ACTIVE; subtitle = getString(R.string.restarting); updateTile() }
+        scope.launch {
+            Device.reboot(this@BootTileService, target)?.let { error ->
+                Toast.makeText(this@BootTileService, error, Toast.LENGTH_LONG).show()
+                onStartListening()
+            }
+        }
     }
 
     override fun onDestroy() {

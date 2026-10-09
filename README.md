@@ -21,13 +21,14 @@ KernelSU Next, SukiSU, APatch**.
 curl -fsSL https://github.com/kingsleydon/rocknix-bootswitch/releases/latest/download/install-linux.sh | sudo bash
 ```
 
-**3. Switch:**
+**3. Switch:** pick where to go. Boot Switch finds every Linux system the ROCKNIX ABL can start (internal storage,
+SD card, USB) and shows it by name, e.g. **Armada**, **ROCKNIX**, **Batocera**.
 
-| From | Tap | Boots |
-|---|---|---|
-| Android | Quick Settings → **Boot to Linux**, or the app | Linux |
-| Linux (Steam / Game Mode) | **…** → **Boot Switch** → **Reboot to Android** | Android |
-| Linux (desktop) | App menu → **Reboot to Android** | Android |
+| From | Tap |
+|---|---|
+| Android | Quick Settings tile, or the app → **Restart into** → *Armada · SD card* |
+| Linux (Game Mode) | **…** → **Boot Switch** → **Android**, or another Linux system |
+| Linux (desktop) | App menu → **Reboot to Android** |
 
 **After an Android system update** the update puts back the stock bootloader and the Linux boot menu
 disappears. Boot Switch shows a notification. Tap it, then **Restore**.
@@ -65,9 +66,10 @@ Boot Switch does exactly what the menu's **Switch boot mode** does:
 - **Android → Linux:** `BootMode=0`. If `BootSourceMode` is `0` and no Linux is installed internally, `BootSourceMode=3` (SD card).
   "Installed internally" means partitions follow `userdata` on the same disk, which is how Armada/ROCKNIX install to internal storage.
 
-So Linux on an **SD card or internal storage** both work without any setting. If detection ever picks the wrong
-place, set **Linux location** in the app (Automatic / SD card / Internal storage / USB), or pass it on Linux:
-`bootswitch.py linux sd`. ROCKNIX ABL builds are recognised by
+Boot Switch lists each place that has Linux (one per location, which is what the ABL supports):
+internal storage when partitions follow `userdata`, the SD card when one is inserted, and USB (which can only be
+detected at boot). The name comes from the first partition's label (`ARMADA`, `ROCKNIX`, `BATOCERA`, ...).
+On the command line: `bootswitch.py targets`, then `bootswitch.py linux sd|internal|usb`. ROCKNIX ABL builds are recognised by
 their `qtestsign` signing certificate (the stock ABL is Qualcomm-signed), so a newer ROCKNIX ABL is never mistaken for stock.
 
 ## Build

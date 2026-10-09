@@ -2,20 +2,16 @@ package io.github.kingsleydon.bootswitch
 
 import android.content.Context
 
-/** Where Linux boots from. AUTOMATIC picks it the way the ROCKNIX ABL menu does. */
-enum class LinuxLocation(val arg: String, val label: String, val description: String) {
-    AUTOMATIC("", "Automatic", "Internal storage if Linux is installed there, otherwise SD card"),
-    SD("sd", "SD card", "Always boot Linux from the SD card"),
-    INTERNAL("internal", "Internal storage", "Always boot Linux installed on internal storage"),
-    USB("usb", "USB", "Always boot Linux from a USB drive"),
-}
-
+/** Remembers the last Linux destination so the tile can offer it first. */
 object Settings {
     private fun prefs(context: Context) = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
-    fun linuxLocation(context: Context): LinuxLocation =
-        LinuxLocation.entries.firstOrNull { it.name == prefs(context).getString("linux_location", null) } ?: LinuxLocation.AUTOMATIC
+    fun lastTarget(context: Context): Target? {
+        val p = prefs(context)
+        val location = p.getString("last_location", null) ?: return null
+        return Target(location, p.getString("last_name", "Linux")!!)
+    }
 
-    fun setLinuxLocation(context: Context, location: LinuxLocation) =
-        prefs(context).edit().putString("linux_location", location.name).apply()
+    fun setLastTarget(context: Context, target: Target) =
+        prefs(context).edit().putString("last_location", target.location).putString("last_name", target.name).apply()
 }

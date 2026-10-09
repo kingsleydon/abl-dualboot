@@ -11,21 +11,30 @@ bootswitch = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(bootswitch)
 
 
-class Plugin:
-    async def get_status(self) -> str:
-        try:
-            return await asyncio.to_thread(bootswitch.status)
-        except Exception as e:
-            decky.logger.warning("status failed: %s", e)
-            return "unknown"
+def _info():
+    mode, source = bootswitch.status().split(" ")
+    return {
+        "mode": mode,
+        "source": source,
+        "targets": [{"location": loc, "name": name} for loc, name in bootswitch.targets()],
+    }
 
-    async def reboot_to_android(self) -> dict:
+
+class Plugin:
+    async def get_info(self) -> dict:
         try:
-            result = await asyncio.to_thread(bootswitch.switch, "android")
+            return await asyncio.to_thread(_info)
+        except Exception as e:
+            decky.logger.warning("get_info failed: %s", e)
+            return {"error": str(e)}
+
+    async def restart_into(self, target: str, location: str = "") -> dict:
+        try:
+            result = await asyncio.to_thread(bootswitch.switch, target, location)
         except Exception as e:
             decky.logger.error("switch failed: %s", e)
             return {"ok": False, "error": str(e)}
-        decky.logger.info("default boot set to %s, rebooting", result)
+        decky.logger.info("default boot set to %s, restarting", result)
         subprocess.Popen(["systemctl", "reboot"])
         return {"ok": True}
 

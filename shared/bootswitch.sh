@@ -1,6 +1,8 @@
 #!/system/bin/sh
 # Read or set the ROCKNIX ABL default boot target stored in devinfo.
-# Usage: bootswitch.sh status | android | linux [sd|internal|usb]
+# Usage: bootswitch.sh status | targets | android | linux [sd|internal|usb]
+#   targets prints one Linux location per line, "<location> <name>": internal and sd when present (name from the
+#   first partition's label, e.g. Armada, ROCKNIX), and usb, which cannot be detected before booting.
 #   linux without a location picks it like the ABL menu does (below); a location overrides that.
 # DEVINFO overrides the partition path (for testing on a copy).
 #
@@ -19,14 +21,34 @@ putb() { printf "\\$(printf %03o $((0x$1)))" | dd of="$2" bs=1 seek=$(($3)) coun
 fail() { echo "! $1" >&2; exit 1; }
 
 # Linux installed internally = partitions after userdata on the same disk (how Armada/ROCKNIX install it).
-internal_linux() {
+# Prints the first such partition's sysfs name.
+internal_part() {
   ud=$(basename "$(readlink -f /dev/block/by-name/userdata)")
   n=$(cat "/sys/class/block/$ud/partition" 2>/dev/null) || return 1
-  disk=${ud%%[0-9]*}
+  disk=${ud%%[0-9]*}; best=""; bestn=999
   for p in /sys/class/block/$disk[0-9]*; do
-    [ "$(cat "$p/partition" 2>/dev/null || echo 0)" -gt "$n" ] && return 0
+    pn=$(cat "$p/partition" 2>/dev/null || echo 0)
+    [ "$pn" -gt "$n" ] && [ "$pn" -lt "$bestn" ] && { best=$(basename "$p"); bestn=$pn; }
+  done
+  [ -n "$best" ] && echo "$best"
+}
+internal_linux() { [ -n "$(internal_part)" ]; }
+# Prints the SD card's sysfs name.
+sd_card() {
+  for d in /sys/class/block/mmcblk[0-9]*; do
+    [ -e "$d/partition" ] && continue
+    [ "$(cat "$d/device/type" 2>/dev/null)" = SD ] && { basename "$d"; return 0; }
   done
   return 1
+}
+# Friendly OS name from a partition's GPT name or filesystem label.
+os_name() {
+  label=$(sed -n 's/^PARTNAME=//p' "/sys/class/block/$1/uevent" 2>/dev/null)
+  [ -n "$label" ] || label=$(blkid "/dev/block/$1" 2>/dev/null | sed -n 's/.* LABEL="\([^"]*\)".*/\1/p')
+  case "$label" in
+    ARMADA*) echo Armada ;; ROCKNIX*) echo ROCKNIX ;; BATOCERA*) echo Batocera ;; KNULLI*) echo Knulli ;;
+    ""|"NO NAME") echo Linux ;; *) echo "$label" ;;
+  esac
 }
 source_name() { case "$1" in 00) echo internal ;; 01) echo auto ;; 02) echo usb ;; 03) echo sd ;; *) echo "unknown" ;; esac; }
 
@@ -43,6 +65,11 @@ case "$1" in
   status)
     [ "$MODE_CUR" = 01 ] && echo "android $(source_name $LINUX_SRC)" || echo "linux $(source_name $SRC_CUR)"
     exit 0 ;;
+  targets)
+    part=$(internal_part) && echo "internal $(os_name "$part")"
+    sd=$(sd_card) && echo "sd $(os_name "${sd}p1")"
+    echo "usb Linux"
+    exit 0 ;;
   android) MODE=01; SRC=00 ;;
   linux)
     MODE=00
@@ -51,7 +78,7 @@ case "$1" in
       sd) SRC=03 ;; internal) SRC=00 ;; usb) SRC=02 ;;
       *) fail "location must be sd, internal or usb" ;;
     esac ;;
-  *) fail "usage: $0 status | android | linux [sd|internal|usb]" ;;
+  *) fail "usage: $0 status | targets | android | linux [sd|internal|usb]" ;;
 esac
 
 BEFORE=$(sha256sum "$P" | cut -d' ' -f1)

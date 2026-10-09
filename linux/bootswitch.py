@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # Read or set the ROCKNIX ABL default boot target stored in devinfo, then reboot.
-# Usage: bootswitch.py status | android | linux [sd|internal|usb]   (add --no-reboot to skip the reboot)
+# Usage: bootswitch.py status | targets | android | linux [sd|internal|usb]   (add --no-reboot to skip the reboot)
+#   targets prints one Linux location per line, "<location> <name>": internal and sd when present (name from the
+#   first partition's label, e.g. Armada, ROCKNIX), and usb, which cannot be detected before booting.
 #   linux without a location picks it like the ABL menu does (below); a location overrides that.
 #
 # Mirrors "Switch boot mode" in the ROCKNIX ABL v1.2 menu (LinuxLoader):
@@ -30,21 +32,86 @@ def check(d):
         raise SwitchError("devinfo layout not recognised - nothing written")
 
 
-def internal_linux():
-    """Linux installed internally = partitions after userdata on the same disk (how Armada/ROCKNIX install it)."""
+def internal_part():
+    """First partition after userdata on the same disk, or None. Linux installed internally
+    (by Armada/ROCKNIX) lives there."""
     ud = os.path.basename(os.path.realpath("/dev/disk/by-partlabel/userdata"))
     try:
         n = int(open(f"/sys/class/block/{ud}/partition").read())
     except OSError:
-        return False
+        return None
     disk = os.path.basename(os.path.realpath(f"/sys/class/block/{ud}/.."))
+    after = []
     for p in os.listdir(f"/sys/class/block/{disk}"):
         try:
-            if int(open(f"/sys/class/block/{disk}/{p}/partition").read()) > n:
-                return True
+            pn = int(open(f"/sys/class/block/{disk}/{p}/partition").read())
         except (OSError, ValueError):
-            pass
-    return False
+            continue
+        if pn > n:
+            after.append((pn, p))
+    return min(after)[1] if after else None
+
+
+def internal_linux():
+    return internal_part() is not None
+
+
+def _fat_label(dev):
+    try:
+        with open(dev, "rb") as f:
+            b = f.read(512)
+    except OSError:
+        return ""
+    if b[0x52:0x57] == b"FAT32":
+        label = b[0x47:0x52]
+    elif b[0x36:0x39] == b"FAT":
+        label = b[0x2B:0x36]
+    else:
+        return ""
+    label = label.decode("ascii", "ignore").strip()
+    return "" if label == "NO NAME" else label
+
+
+def os_name(part):
+    """Friendly OS name from a partition's GPT name or FAT label."""
+    label = ""
+    try:
+        for line in open(f"/sys/class/block/{part}/uevent"):
+            if line.startswith("PARTNAME="):
+                label = line.split("=", 1)[1].strip()
+    except OSError:
+        pass
+    label = label or _fat_label(f"/dev/{part}")
+    for prefix, name in (("ARMADA", "Armada"), ("ROCKNIX", "ROCKNIX"), ("BATOCERA", "Batocera"), ("KNULLI", "Knulli")):
+        if label.upper().startswith(prefix):
+            return name
+    return label or "Linux"
+
+
+def sd_card():
+    """The SD card's block device name (e.g. mmcblk0), or None."""
+    for name in os.listdir("/sys/class/block"):
+        d = f"/sys/class/block/{name}"
+        if name.startswith("mmcblk") and not os.path.exists(f"{d}/partition"):
+            try:
+                if open(f"{d}/device/type").read().strip() == "SD":
+                    return name
+            except OSError:
+                pass
+    return None
+
+
+def targets():
+    """Linux locations to offer as (location, OS name): internal and sd when present, usb always."""
+    result = []
+    part = internal_part()
+    if part:
+        result.append(("internal", os_name(part)))
+    sd = sd_card()
+    if sd:
+        result.append(("sd", os_name(f"{sd}p1")))
+    result.append(("usb", "Linux"))
+    return result
 
 
 def _linux_source(d):
@@ -95,8 +162,11 @@ def main():
         if cmd == "status":
             print(status())
             return
+        if cmd == "targets":
+            print("\n".join(f"{loc} {name}" for loc, name in targets()))
+            return
         if cmd not in ("android", "linux"):
-            raise SwitchError("usage: bootswitch.py status | android | linux [sd|internal|usb] [--no-reboot]")
+            raise SwitchError("usage: bootswitch.py status | targets | android | linux [sd|internal|usb] [--no-reboot]")
         print(switch(cmd, args[1] if len(args) > 1 else "") + " ok")
     except SwitchError as e:
         sys.exit(f"! {e}")

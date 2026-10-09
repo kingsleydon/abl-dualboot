@@ -10,12 +10,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.ui.semantics.Role
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.ListItem
-import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Lock
@@ -44,9 +39,13 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -62,11 +61,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -94,7 +91,7 @@ class MainActivity : ComponentActivity() {
 }
 
 private sealed interface Dialog {
-    data object Reboot : Dialog
+    data class Restart(val target: Target) : Dialog
     data class InstallAbl(val soc: String, val restore: Boolean) : Dialog
 }
 
@@ -103,12 +100,11 @@ private sealed interface Dialog {
 private fun App(onAddTile: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val snackbar = remember { SnackbarHostState() }
     var state by remember { mutableStateOf<DeviceState>(DeviceState.Loading) }
     var dialog by remember { mutableStateOf<Dialog?>(null) }
     var busy by remember { mutableStateOf(false) }
     var log by remember { mutableStateOf<String?>(null) }
-    var location by remember { mutableStateOf(Settings.linuxLocation(context)) }
-    var pickingLocation by remember { mutableStateOf(false) }
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     fun refresh() = scope.launch { state = DeviceState.Loading; state = Device.load(context) }
@@ -116,6 +112,7 @@ private fun App(onAddTile: () -> Unit) {
 
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             LargeTopAppBar(
                 title = { Text("Boot Switch") },
@@ -126,30 +123,42 @@ private fun App(onAddTile: () -> Unit) {
     ) { padding ->
         Column(
             Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             AnimatedContent(state, label = "state") { s ->
                 when (s) {
                     DeviceState.Loading -> Box(Modifier.fillMaxWidth().padding(48.dp), Alignment.Center) { CircularProgressIndicator() }
                     is DeviceState.NoRoot -> NoRootCard(s.manager) { Root.retry(); refresh() }
-                    is DeviceState.Ready -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        BootCard(s, location)
-                        BootloaderCard(s.abl) { restore -> dialog = Dialog.InstallAbl(s.abl.soc, restore) }
+                    is DeviceState.Ready -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (!s.abl.installed) BootloaderCard(s.abl) { restore -> dialog = Dialog.InstallAbl(s.abl.soc, restore) }
                         log?.let { LogCard(it) }
-                        LocationCard(location) { pickingLocation = true }
-                        Button(
-                            onClick = { dialog = Dialog.Reboot },
-                            enabled = s.abl.installed && !busy,
-                            modifier = Modifier.fillMaxWidth().height(64.dp),
-                        ) {
-                            Icon(painterResource(R.drawable.ic_tile), null, Modifier.size(24.dp))
-                            Spacer(Modifier.size(12.dp))
-                            Text("Reboot to Linux", style = MaterialTheme.typography.titleMedium)
+                        SectionLabel("Restart into")
+                        s.targets.forEach { target ->
+                            TargetCard(target, enabled = s.abl.installed && !busy) { dialog = Dialog.Restart(target) }
                         }
+                        Text(
+                            "Your device normally starts ${if (s.defaultBoot == BootTarget.LINUX) "Linux" else "Android"}. " +
+                                "Hold VOL- at power-on for the boot menu.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 4.dp),
+                        )
+                        Spacer(Modifier.height(8.dp))
                         FilledTonalButton(onClick = onAddTile, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Filled.Add, null)
                             Spacer(Modifier.size(8.dp))
                             Text("Add Quick Settings tile")
+                        }
+                        if (s.abl.installed) {
+                            Row(Modifier.padding(horizontal = 4.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.CheckCircle, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                                Spacer(Modifier.size(8.dp))
+                                Text(
+                                    "ROCKNIX bootloader installed · ${s.abl.soc}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                         Spacer(Modifier.height(24.dp))
                     }
@@ -158,44 +167,49 @@ private fun App(onAddTile: () -> Unit) {
         }
     }
 
-    if (pickingLocation) {
-        LocationDialog(
-            selected = location,
-            onSelect = { location = it; Settings.setLinuxLocation(context, it); pickingLocation = false },
-            onDismiss = { pickingLocation = false },
-        )
-    }
-
     when (val d = dialog) {
         null -> {}
-        Dialog.Reboot -> AlertDialog(
+        is Dialog.Restart -> AlertDialog(
             onDismissRequest = { dialog = null },
             icon = { Icon(painterResource(R.drawable.ic_tile), null) },
-            title = { Text(stringResource(R.string.confirm_title)) },
-            text = { Text(stringResource(R.string.confirm_body)) },
+            title = { Text("Restart into ${d.target.title}?") },
+            text = {
+                Text(
+                    (if (d.target.location == "usb") "Plug in the USB drive first. " else "") +
+                        "Your device restarts now and keeps starting ${d.target.title} until you switch back.",
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     dialog = null; busy = true
-                    scope.launch { log = Device.rebootToLinux(context)?.let { "! $it" }; busy = false }
-                }) { Text(stringResource(R.string.reboot)) }
+                    scope.launch {
+                        Device.reboot(context, d.target)?.let { snackbar.showSnackbar(it) }
+                        busy = false
+                    }
+                }) { Text("Restart") }
             },
             dismissButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
         )
         is Dialog.InstallAbl -> AlertDialog(
             onDismissRequest = { dialog = null },
             icon = { Icon(Icons.Filled.Warning, null) },
-            title = { Text(if (d.restore) "Restore Linux boot menu?" else "Install ROCKNIX ABL?") },
+            title = { Text(if (d.restore) "Restore the Linux boot menu?" else "Install the ROCKNIX bootloader?") },
             text = {
                 Text(
-                    (if (d.restore) "Re-installs the ROCKNIX bootloader (${d.soc}) that a system update replaced."
+                    (if (d.restore) "A system update replaced the ROCKNIX bootloader (${d.soc}). This puts it back."
                     else "Replaces your device's bootloader with the ROCKNIX ABL for ${d.soc}. A wrong or interrupted flash can leave the device unbootable.") +
-                        "\n\nYour stock bootloader is backed up to ${Device.BACKUP_DIR} first. Every write is verified.",
+                        "\n\nYour stock bootloader is backed up to ${Device.BACKUP_DIR} first, and every write is verified.",
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
                     dialog = null; busy = true
-                    scope.launch { log = Device.installAbl(context, d.soc).output; busy = false; refresh() }
+                    scope.launch {
+                        val r = Device.installAbl(context, d.soc)
+                        if (!r.ok) log = r.output
+                        snackbar.showSnackbar(if (r.ok) "Done. The boot menu is back." else "Failed - see details")
+                        busy = false; refresh()
+                    }
                 }) { Text(if (d.restore) "Restore" else "Install") }
             },
             dismissButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
@@ -204,115 +218,77 @@ private fun App(onAddTile: () -> Unit) {
 }
 
 @Composable
-private fun StatusRow(icon: ImageVector?, tint: Color, label: String, value: String, detail: String? = null) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        if (icon != null) Icon(icon, null, Modifier.size(32.dp), tint = tint)
-        else Icon(painterResource(R.drawable.ic_tile), null, Modifier.size(32.dp), tint = tint)
-        Spacer(Modifier.size(16.dp))
-        Column {
-            Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(value, style = MaterialTheme.typography.titleLarge)
-            detail?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
-    }
+private fun SectionLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 4.dp, top = 8.dp),
+    )
 }
 
 @Composable
-private fun BootCard(s: DeviceState.Ready, location: LinuxLocation) {
-    val from = if (location == LinuxLocation.AUTOMATIC) s.source.label else location.label.lowercase()
-    ElevatedCard(Modifier.fillMaxWidth()) {
-        Box(Modifier.padding(20.dp)) {
-            StatusRow(
-                icon = null,
-                tint = MaterialTheme.colorScheme.primary,
-                label = "Default boot",
-                value = when (s.target) {
-                    BootTarget.ANDROID -> "Android"
-                    BootTarget.LINUX -> "Linux"
-                    BootTarget.UNKNOWN -> "Unknown"
-                },
-                detail = s.switchError ?: "Linux boots from $from",
-            )
-        }
-    }
-}
-
-@Composable
-private fun BootloaderCard(abl: AblStatus, onInstall: (restore: Boolean) -> Unit) {
-    val warn = !abl.installed
+private fun TargetCard(target: Target, enabled: Boolean, onClick: () -> Unit) {
+    val usb = target.location == "usb"
     ElevatedCard(
-        Modifier.fillMaxWidth(),
-        colors = if (warn) CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
-        else CardDefaults.elevatedCardColors(),
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth(),
+        colors = if (usb) CardDefaults.elevatedCardColors() else CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+        ),
     ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            when {
-                abl.installed -> StatusRow(Icons.Filled.CheckCircle, MaterialTheme.colorScheme.primary,
-                    "Bootloader", "ROCKNIX ABL", "${abl.soc} · both slots")
-                !abl.supported -> StatusRow(Icons.Filled.Warning, MaterialTheme.colorScheme.error,
-                    "Bootloader", "Not supported", "This SoC has no ROCKNIX ABL build")
-                abl.replacedByUpdate -> {
-                    StatusRow(Icons.Filled.Warning, MaterialTheme.colorScheme.error,
-                        "Bootloader", "Linux boot menu removed", "A system update restored the stock bootloader")
-                    Button(onClick = { onInstall(true) }, Modifier.fillMaxWidth()) { Text("Restore") }
-                }
-                else -> {
-                    StatusRow(Icons.Filled.Warning, MaterialTheme.colorScheme.error,
-                        "Bootloader", "Stock bootloader", "Install the ROCKNIX ABL to dual-boot Linux (${abl.soc})")
-                    OutlinedButton(onClick = { onInstall(false) }, Modifier.fillMaxWidth()) { Text("Install ROCKNIX ABL…") }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun LocationCard(location: LinuxLocation, onClick: () -> Unit) {
-    ElevatedCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         ListItem(
-            headlineContent = { Text("Linux location") },
-            supportingContent = { Text(location.label) },
+            leadingContent = { Icon(painterResource(R.drawable.ic_tile), null, Modifier.size(32.dp)) },
+            headlineContent = { Text(target.title, style = MaterialTheme.typography.titleLarge) },
+            supportingContent = { Text(if (usb) "USB drive · plug in before restarting" else target.where) },
+            trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null) },
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            modifier = Modifier.padding(vertical = 8.dp),
         )
     }
 }
 
 @Composable
-private fun LocationDialog(selected: LinuxLocation, onSelect: (LinuxLocation) -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Linux location") },
-        text = {
-            Column(Modifier.selectableGroup()) {
-                LinuxLocation.entries.forEach { option ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .selectable(selected = option == selected, onClick = { onSelect(option) }, role = Role.RadioButton)
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(selected = option == selected, onClick = null)
-                        Spacer(Modifier.size(16.dp))
-                        Column {
-                            Text(option.label, style = MaterialTheme.typography.bodyLarge)
-                            Text(option.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
+private fun BootloaderCard(abl: AblStatus, onInstall: (restore: Boolean) -> Unit) {
+    ElevatedCard(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+    ) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            val (title, body) = when {
+                !abl.supported -> "Device not supported" to "There is no ROCKNIX bootloader for this chip."
+                abl.replacedByUpdate -> "Linux boot menu removed" to "A system update put back the stock bootloader. Restore it to switch to Linux again."
+                else -> "ROCKNIX bootloader needed" to "Install it to dual-boot Linux (${abl.soc})."
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
-    )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                Spacer(Modifier.size(12.dp))
+                Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+            }
+            Text(body, color = MaterialTheme.colorScheme.onErrorContainer)
+            when {
+                !abl.supported -> {}
+                abl.replacedByUpdate -> Button(onClick = { onInstall(true) }, Modifier.fillMaxWidth()) { Text("Restore") }
+                else -> OutlinedButton(onClick = { onInstall(false) }, Modifier.fillMaxWidth()) { Text("Install ROCKNIX bootloader…") }
+            }
+        }
+    }
 }
 
 @Composable
 private fun NoRootCard(manager: Root.Manager?, onRetry: () -> Unit) {
     ElevatedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatusRow(Icons.Filled.Lock, MaterialTheme.colorScheme.error, "Root access", "Needed",
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.error)
+                Spacer(Modifier.size(12.dp))
+                Text("Root access needed", style = MaterialTheme.typography.titleMedium)
+            }
+            Text(
                 manager?.let { "${it.label} detected. ${it.grantSteps}" }
-                    ?: "No root manager found. Install Magisk, KernelSU or APatch, then allow Boot Switch.")
+                    ?: "No root manager found. Install Magisk, KernelSU or APatch, then allow Boot Switch.",
+            )
             Button(onClick = onRetry, Modifier.fillMaxWidth()) { Text("Try again") }
         }
     }

@@ -30,6 +30,8 @@ object Root {
         return file.absolutePath
     }
 
+    const val NO_ROOT = "Boot Switch needs root access. Open the app for setup steps."
+
     enum class Manager(val label: String, val packages: List<String>, val grantSteps: String) {
         MAGISK("Magisk", listOf("com.topjohnwu.magisk", "io.github.huskydg.magisk", "io.github.vvb2060.magisk"),
             "Tap Grant when Magisk asks. If you denied it before: Magisk → Superuser → enable Boot Switch."),
