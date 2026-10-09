@@ -14,8 +14,10 @@ object Root {
 
     fun run(command: String): Result {
         if (!available()) return Result(false, "")
-        val r = Shell.cmd(command).exec()
-        return Result(r.isSuccess, r.out.joinToString("\n").trim())
+        // Scripts report errors on stderr; collect both streams in order, as the user sees them.
+        val output = ArrayList<String>()
+        val r = Shell.cmd(command).to(output, output).exec()
+        return Result(r.isSuccess, output.joinToString("\n").trim())
     }
 
     fun available(): Boolean = Shell.getShell().isRoot
