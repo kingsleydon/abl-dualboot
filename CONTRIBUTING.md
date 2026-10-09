@@ -9,10 +9,9 @@ chip and setup you tried, and what worked.
 |---|---|
 | Android app | `cd android && ./gradlew assembleDebug` (JDK 17+) |
 | Decky plugin | `cd decky && pnpm i && pnpm build` (pnpm 9) |
-| Modules | packaged by CI from `modules/` and `shared/` |
 
 The ROCKNIX ABL binaries are not in this repo or the app. The pinned release is in `abl.properties`; the app
-downloads it on demand and CI downloads it for the restore module, both checking the pinned SHA-256.
+downloads it on demand and checks the pinned SHA-256.
 
 ## Changing the switch logic
 

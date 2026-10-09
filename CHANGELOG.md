@@ -1,5 +1,8 @@
 # Changelog
 
+## v2.2.0
+- Removed the Magisk/KernelSU/APatch modules; the app does both jobs (restart into Linux, restore the bootloader). The project no longer ships any ROCKNIX binary.
+
 ## v2.1.0
 - The app no longer bundles the ROCKNIX ABL. Install/Restore downloads the official release from github.com/ROCKNIX/abl and verifies it against a pinned checksum.
 

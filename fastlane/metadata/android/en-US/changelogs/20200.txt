@@ -1,0 +1,1 @@
+- Removed the separate root modules; the app covers restarting into Linux and restoring the bootloader.

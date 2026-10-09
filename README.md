@@ -58,7 +58,6 @@ Every part updates the way its platform intends:
 | Part | How it updates |
 |---|---|
 | Android app | Built-in: checks this repo's releases daily and updates through Android's `PackageInstaller`. After you allow *Install unknown apps* once, updates install without prompts (or turn on *Install updates automatically*). You can also track it with [Obtainium](https://github.com/ImranR98/Obtainium). |
-| Magisk / KernelSU / APatch modules | Your root manager shows the update (`updateJson`). |
 | Decky plugin | Re-run the Linux installer for now; Decky's Plugin Store will handle it once the plugin is listed. |
 | Bundled ROCKNIX ABL | A weekly workflow opens a PR when ROCKNIX releases a new ABL, for review and testing. |
 
@@ -69,12 +68,8 @@ and Android only accepts an update signed with the same key.
 
 | File | For |
 |---|---|
-| `abl-dualboot-module-restart-into-linux.zip` | Restart into Linux as a Magisk / KernelSU / APatch module (Modules → Action) |
-| `abl-dualboot-module-restore-abl.zip` | Restore the ROCKNIX ABL after Android updates, as a module (Modules → Action) |
 | `abl-dualboot-decky.zip` | Decky plugin only (the installer already adds it) |
 | `abl-dualboot-linux.zip` | `dualboot.py` + desktop launcher, for manual installs |
-
-Modules update themselves from the manager app (`updateJson`).
 
 > [!WARNING]
 > ABL Dual Boot writes to the `devinfo` partition (which also stores bootloader state), and installing the
@@ -108,12 +103,11 @@ their `qtestsign` signing certificate (the stock ABL is Qualcomm-signed), so a n
 
 - `android/`: Kotlin + Jetpack Compose (Material 3), root via [libsu](https://github.com/topjohnwu/libsu). `./gradlew assembleRelease`
 - `decky/`: built from [decky-plugin-template](https://github.com/SteamDeckHomebrew/decky-plugin-template). `pnpm i && pnpm build`
-- `modules/`: [Magisk module format](https://topjohnwu.github.io/Magisk/guides.html), also understood by KernelSU and APatch
-- `shared/`: the device scripts used by both the app and the modules
+- `shared/`: the device scripts the app runs as root
 
 GitHub Actions builds everything; pushing a `v*` tag publishes a release. The ROCKNIX ABL is not stored here or
 bundled in the app: the app downloads the official release only when you install or restore the bootloader, and
-checks it against the SHA-256 pinned in `abl.properties` (the restore module bundles the same verified files).
+checks it against the SHA-256 pinned in `abl.properties`.
 
 ## Verify a download
 

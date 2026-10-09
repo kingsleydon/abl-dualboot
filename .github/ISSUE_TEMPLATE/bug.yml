@@ -16,7 +16,7 @@ body:
     id: where
     attributes:
       label: "Where did it happen?"
-      options: [Android app, Quick Settings tile, Magisk/KernelSU/APatch module, Decky plugin, Linux command line / launcher]
+      options: [Android app, Quick Settings tile, Decky plugin, Linux command line / launcher]
     validations:
       required: true
   - type: input

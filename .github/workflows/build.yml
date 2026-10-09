@@ -29,23 +29,6 @@ jobs:
           fi
           echo "name=$name" >> "$GITHUB_OUTPUT"; echo "code=$code" >> "$GITHUB_OUTPUT"
 
-  abl:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-      - name: Download ROCKNIX ABL (official release, checksum pinned in abl.properties)
-        run: |
-          . ./abl.properties
-          curl -fsSL -o abl.tar.gz "https://github.com/ROCKNIX/abl/releases/download/$ABL_VERSION/rocknix-abl-$ABL_VERSION.tar.gz"
-          echo "$ABL_TARBALL_SHA256  abl.tar.gz" | sha256sum -c
-          tar -xzf abl.tar.gz
-          mkdir abl && cp rocknix-abl-$ABL_VERSION/*.elf rocknix-abl-$ABL_VERSION/*.sha256 abl/
-          (cd abl && sha256sum -c *.sha256)
-      - uses: actions/upload-artifact@v7
-        with:
-          name: abl
-          path: abl/
-
   android:
     needs: version
     runs-on: ubuntu-24.04
@@ -108,44 +91,24 @@ jobs:
           name: decky
           path: out/
 
-  modules:
-    needs: [version, abl]
+  linux:
+    needs: version
     runs-on: ubuntu-24.04
-    env:
-      VERSION_NAME: ${{ needs.version.outputs.name }}
-      VERSION_CODE: ${{ needs.version.outputs.code }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
-        with:
-          name: abl
-          path: abl
-      - name: Magisk / KernelSU / APatch modules
-        run: |
-          mkdir -p out
-          cp shared/dualboot.sh modules/restart-into-linux/
-          cp shared/abl.sh modules/restore-abl/ && cp -r abl modules/restore-abl/abl
-          for m in restart-into-linux restore-abl; do
-            sed -i "s/^version=.*/version=v$VERSION_NAME/; s/^versionCode=.*/versionCode=$VERSION_CODE/" modules/$m/module.prop
-            cp -r modules/_magisk/META-INF modules/$m/
-            (cd modules/$m && zip -rX ../../out/abl-dualboot-module-$m.zip .)
-            jq -n --arg v "v$VERSION_NAME" --argjson c "$VERSION_CODE" \
-              --arg zip "https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION_NAME/abl-dualboot-module-$m.zip" \
-              --arg log "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/main/CHANGELOG.md" \
-              '{version: $v, versionCode: $c, zipUrl: $zip, changelog: $log}' > out/abl-dualboot-module-$m.json
-          done
       - name: Linux scripts
         run: |
+          mkdir -p out
           (cd linux && zip -X ../out/abl-dualboot-linux.zip dualboot.py reboot-to-android.desktop)
           cp linux/install.sh out/install-linux.sh
       - uses: actions/upload-artifact@v7
         with:
-          name: modules
+          name: linux
           path: out/
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [android, decky, modules]
+    needs: [android, decky, linux]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -155,7 +118,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
-          pattern: "{android,decky,modules}"
+          pattern: "{android,decky,linux}"
           path: out
           merge-multiple: true
       - uses: actions/attest-build-provenance@v4

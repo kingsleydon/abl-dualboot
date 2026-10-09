@@ -26,7 +26,7 @@ sealed interface DeviceState {
     data class Ready(val defaultBoot: BootTarget, val targets: List<Target>, val abl: AblStatus, val error: String?) : DeviceState
 }
 
-/** Talks to the bundled shell scripts (shared with the Magisk/KernelSU modules). */
+/** Talks to the bundled device scripts in shared/. */
 object Device {
     const val BACKUP_DIR = "/sdcard/ABLDualBoot/backup"
 
