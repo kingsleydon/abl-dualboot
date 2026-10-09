@@ -18,6 +18,7 @@ import java.util.concurrent.TimeUnit
 /** Daily update check: installs automatically if enabled, otherwise posts a notification. */
 class UpdateWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
+        if (!Updater.enabled(applicationContext)) return Result.success()
         val release = try { Updater.check() } catch (e: Exception) { return Result.retry() } ?: return Result.success()
         if (Settings.autoUpdate(applicationContext) && applicationContext.packageManager.canRequestPackageInstalls()) {
             Updater.install(applicationContext, release)

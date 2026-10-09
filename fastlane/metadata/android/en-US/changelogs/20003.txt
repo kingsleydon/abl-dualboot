@@ -1,0 +1,1 @@
+- The built-in updater turns off when an app store (F-Droid, IzzyOnDroid, Obtainium) installed the app; the store handles updates.

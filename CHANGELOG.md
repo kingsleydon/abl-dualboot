@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.0.3
+- The built-in updater turns off when an app store (F-Droid, IzzyOnDroid, Obtainium) installed the app; the store handles updates.
+- Fastlane metadata for F-Droid-compatible repositories.
+
 ## v2.0.2
 - Decky plugin reports the release version.
 

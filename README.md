@@ -9,6 +9,9 @@ Works with any Linux that boots through the ROCKNIX ABL (Armada, ROCKNIX, Batoce
 from an **SD card or internal storage**, and with every common root solution: **Magisk, KernelSU,
 KernelSU Next, SukiSU, APatch**.
 
+<a href="../../releases/latest/download/ABL-Dual-Boot.apk"><img alt="Download APK" src="https://img.shields.io/github/v/release/kingsleydon/abl-dualboot?label=Download%20APK&logo=android" height="28"></a>
+<a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/kingsleydon/abl-dualboot"><img alt="Get it on Obtainium" src="docs/badge_obtainium.png" height="48"></a>
+
 ## Screenshots
 
 | Android app | Quick Settings tile |
@@ -40,6 +43,14 @@ SD card, USB) and shows it by name, e.g. **Armada**, **ROCKNIX**, **Batocera**.
 
 **After an Android system update** the update puts back the stock bootloader and the Linux boot menu
 disappears. ABL Dual Boot shows a notification. Tap it, then **Restore**.
+
+## Tested devices
+
+| Device | Chip | Android | Linux | Result |
+|---|---|---|---|---|
+| AYN Odin 2 Portal | SM8550 | LineageOS 23.2 + KernelSU | Armada 20260926 (SD card) | ✅ Switching both ways |
+
+Tried it on another device? A [device report](../../issues/new?template=device.yml) adds it here.
 
 ## Updates
 

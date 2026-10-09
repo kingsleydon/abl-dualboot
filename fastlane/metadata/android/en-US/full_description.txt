@@ -1,0 +1,14 @@
+<p>Switch between Android and Linux on handhelds that use the <a href="https://github.com/ROCKNIX/abl">ROCKNIX ABL</a> bootloader without holding VOL- at power-on.</p>
+
+<p>ABL Dual Boot finds every Linux system the bootloader can start (internal storage, SD card, USB) and shows it by name, such as Armada, ROCKNIX or Batocera. Tap one, confirm, and your device restarts into it.</p>
+
+<ul>
+<li>Quick Settings tile with the system you used last</li>
+<li>Installs the ROCKNIX ABL, or restores it after an Android system update removed it (stock bootloader is backed up first)</li>
+<li>Works with Magisk, KernelSU, KernelSU Next, SukiSU and APatch</li>
+<li>Companion Decky plugin and script to switch back from Linux</li>
+</ul>
+
+<p><b>Requires root.</b> It writes the same two bytes in the devinfo partition that the ROCKNIX boot menu writes, verifies them, and restores the original on any mismatch. Tested on an AYN Odin 2 Portal (SM8550). The VOL- boot menu always remains as a fallback.</p>
+
+<p>The app bundles the official ROCKNIX ABL builds (checksum-verified) so it can restore the boot menu offline.</p>

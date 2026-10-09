@@ -116,7 +116,7 @@ private fun App(onAddTile: () -> Unit) {
     fun refresh() = scope.launch { state = DeviceState.Loading; state = Device.load(context) }
     LaunchedEffect(Unit) {
         refresh()
-        release = try { Updater.check() } catch (e: Exception) { null }
+        if (Updater.enabled(context)) release = try { Updater.check() } catch (e: Exception) { null }
     }
 
     Scaffold(
@@ -174,7 +174,7 @@ private fun App(onAddTile: () -> Unit) {
                             Spacer(Modifier.size(8.dp))
                             Text("Add Quick Settings tile")
                         }
-                        ListItem(
+                        if (Updater.enabled(context)) ListItem(
                             headlineContent = { Text("Install updates automatically") },
                             supportingContent = { Text("Checks GitHub once a day and installs new releases. Otherwise you get a notification.") },
                             trailingContent = {

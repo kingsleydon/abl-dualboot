@@ -24,4 +24,8 @@ DEVINFO=./devinfo-copy.img DUALBOOT_TMP=/tmp sh shared/dualboot.sh linux
 DEVINFO=./devinfo-copy.img python3 linux/dualboot.py linux --no-reboot
 ```
 
-Releases are made by pushing a `v*` tag; CI builds, attests and publishes everything.
+## Releasing
+
+1. Add a `## vX.Y.Z` section to `CHANGELOG.md` (it becomes the release notes).
+2. Add `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`, where versionCode is X*10000 + Y*100 + Z.
+3. Push a `vX.Y.Z` tag; CI builds, attests and publishes everything.

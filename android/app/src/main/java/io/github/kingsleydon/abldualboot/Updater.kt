@@ -21,6 +21,16 @@ object Updater {
     private const val REPO = "kingsleydon/abl-dualboot"
     private const val APK = "ABL-Dual-Boot.apk"
 
+    /**
+     * The built-in updater only runs for APKs installed by hand (file manager, adb) or by itself.
+     * When an app store installed us (F-Droid, IzzyOnDroid clients, Obtainium, ...), that store owns updates.
+     */
+    fun enabled(context: Context): Boolean {
+        val installer = context.packageManager.getInstallSourceInfo(context.packageName).installingPackageName
+        return installer == null || installer == context.packageName || installer == "com.android.shell" ||
+            installer.endsWith(".packageinstaller")
+    }
+
     data class Release(val version: String, val code: Int, val notes: String, val apkUrl: String, val sha256: String)
 
     /** v1.2.3 -> 10203, matching the versionCode CI gives release builds. */
