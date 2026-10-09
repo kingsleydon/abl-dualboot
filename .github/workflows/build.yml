@@ -1,0 +1,82 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  ABL_VERSION: v1.2
+  ABL_SM8550_SHA256: 8c27a70961476b327071ada2fd9b9c55dd2dcdc913eff3d33f2576133d7e398c
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.11.1
+      - name: Decode signing key
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/release.jks"
+      - name: Build release APK
+        working-directory: android
+        env:
+          KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          gradle :app:assembleRelease --no-daemon
+          mkdir -p ../out && cp app/build/outputs/apk/release/app-release.apk ../out/BootSwitch.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: out/
+
+  packages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: KernelSU module - Boot to Linux
+        run: |
+          mkdir -p out
+          cp shared/bootswitch.sh kernelsu/boot-to-linux/
+          (cd kernelsu/boot-to-linux && zip -X ../../out/boot-to-linux-ksu.zip *)
+      - name: KernelSU module - ROCKNIX ABL Reflash (official ABL, checksum verified)
+        run: |
+          curl -fsSL "https://github.com/ROCKNIX/abl/releases/download/$ABL_VERSION/rocknix-abl-$ABL_VERSION.tar.gz" | tar -xz
+          cp "rocknix-abl-$ABL_VERSION/abl_signed-SM8550.elf" kernelsu/abl-reflash/abl.elf
+          echo "$ABL_SM8550_SHA256  kernelsu/abl-reflash/abl.elf" | sha256sum -c
+          (cd kernelsu/abl-reflash && zip -X ../../out/rocknix-abl-reflash-sm8550-ksu.zip *)
+      - name: Decky plugin
+        run: |
+          mkdir -p pkg/boot-switch && cp -r decky/. pkg/boot-switch/
+          (cd pkg && zip -rX ../out/boot-switch-decky.zip boot-switch)
+      - name: Linux scripts
+        run: (cd linux && zip -X ../out/bootswitch-linux.zip *)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: out/
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [android, packages]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes "See README for install steps and warnings."

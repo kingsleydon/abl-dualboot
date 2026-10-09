@@ -1,0 +1,6 @@
+{
+  "name": "Boot Switch",
+  "author": "kingsleydon",
+  "flags": ["root"],
+  "api_version": 1
+}

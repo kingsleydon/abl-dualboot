@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Reboot to Android
+Comment=Set the ROCKNIX ABL boot target to Android and reboot
+Exec=sudo /etc/bootswitch/bootswitch.py android
+Icon=system-reboot
+Terminal=false
+Categories=System;

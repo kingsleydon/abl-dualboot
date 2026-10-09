@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Boot Switch</string>
+    <string name="tile_label">Boot to Linux</string>
+</resources>

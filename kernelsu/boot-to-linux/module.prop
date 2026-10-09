@@ -1,0 +1,6 @@
+id=rocknix_boot_to_linux
+name=Boot to Linux (ROCKNIX ABL)
+version=v1.0
+versionCode=1
+author=kingsleydon
+description=Tap Action to set the ROCKNIX ABL default boot target to Linux (SD card) and reboot.

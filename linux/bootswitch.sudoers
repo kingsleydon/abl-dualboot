@@ -1,0 +1,1 @@
+armada ALL=(root) NOPASSWD: /etc/bootswitch/bootswitch.py android, /etc/bootswitch/bootswitch.py linux, /etc/bootswitch/bootswitch.py android --no-reboot, /etc/bootswitch/bootswitch.py linux --no-reboot
