@@ -23,7 +23,7 @@ prefix_sha() { head -c "$2" "/dev/block/by-name/abl_$1" | sha256sum | cut -d' ' 
 
 case "$1" in
   status)
-    echo "soc=$(soc) slot=$(getprop ro.boot.slot_suffix | tr -d _) a=$(kind a) b=$(kind b)" ;;
+    echo "soc=$(soc) a=$(kind a) b=$(kind b)" ;;
   flash)
     ELF=$2; SHA=$3; BAK=$4
     [ "$(soc)" != unknown ] || fail "unsupported SoC $(getprop ro.board.platform)"

@@ -8,9 +8,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
-import java.security.MessageDigest
 
 /**
  * Updates from this repo's GitHub releases through Android's PackageInstaller (self-update). A download is
@@ -39,17 +36,12 @@ object Updater {
         return if (parts.size == 3) parts[0] * 10000 + parts[1] * 100 + parts[2] else null
     }
 
-    private fun get(url: String): HttpURLConnection = (URL(url).openConnection() as HttpURLConnection).apply {
-        setRequestProperty("Accept", "application/vnd.github+json")
-        setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
-        setRequestProperty("User-Agent", "abl-dualboot/${BuildConfig.VERSION_NAME}")
-        connectTimeout = 15_000
-        readTimeout = 30_000
-    }
-
     /** The latest release if it is newer than this build, otherwise null. */
     suspend fun check(): Release? = withContext(Dispatchers.IO) {
-        val json = JSONObject(get("https://api.github.com/repos/$REPO/releases/latest").inputStream.bufferedReader().readText())
+        val json = JSONObject(
+            httpGet("https://api.github.com/repos/$REPO/releases/latest", accept = "application/vnd.github+json")
+                .inputStream.bufferedReader().readText(),
+        )
         val tag = json.getString("tag_name")
         val code = versionCode(tag) ?: return@withContext null
         if (code <= BuildConfig.VERSION_CODE) return@withContext null
@@ -67,9 +59,8 @@ object Updater {
     suspend fun install(context: Context, release: Release): String? = withContext(Dispatchers.IO) {
         val file = File(context.cacheDir, "update.apk")
         try {
-            get(release.apkUrl).inputStream.use { input -> file.outputStream().use { input.copyTo(it) } }
-            val sha = MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) }
-            if (sha != release.sha256) return@withContext "Download did not match the release checksum - not installed"
+            httpGet(release.apkUrl).inputStream.use { input -> file.outputStream().use { input.copyTo(it) } }
+            if (sha256(file.readBytes()) != release.sha256) return@withContext "Download did not match the release checksum - not installed"
 
             val installer = context.packageManager.packageInstaller
             val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {

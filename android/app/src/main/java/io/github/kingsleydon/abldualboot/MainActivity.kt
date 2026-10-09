@@ -4,14 +4,14 @@ import android.Manifest
 import android.app.StatusBarManager
 import android.content.ComponentName
 import android.content.Intent
-import android.net.Uri
 import android.graphics.drawable.Icon
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,8 +52,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -76,11 +74,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 0)
-        setContent {
-            val context = LocalContext.current
-            val colors = if (isSystemInDarkTheme()) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-            MaterialTheme(colorScheme = colors) { App(onAddTile = ::requestTile) }
-        }
+        setContent { AppTheme { App(onAddTile = ::requestTile) } }
     }
 
     private fun requestTile() {
@@ -110,7 +104,7 @@ private fun App(onAddTile: () -> Unit) {
     var log by remember { mutableStateOf<String?>(null) }
     var release by remember { mutableStateOf<Updater.Release?>(null) }
     var updating by remember { mutableStateOf(false) }
-    var autoUpdate by remember { mutableStateOf(Settings.autoUpdate(context)) }
+    var autoUpdate by remember { mutableStateOf(Prefs.autoUpdate(context)) }
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     fun refresh() = scope.launch { state = DeviceState.Loading; state = Device.load(context) }
@@ -144,7 +138,7 @@ private fun App(onAddTile: () -> Unit) {
                                 if (!context.packageManager.canRequestPackageInstalls()) {
                                     // One-time permission so ABL Dual Boot can update itself (Settings > Install unknown apps).
                                     context.startActivity(
-                                        Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")),
+                                        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")),
                                     )
                                 } else {
                                     updating = true
@@ -178,7 +172,7 @@ private fun App(onAddTile: () -> Unit) {
                             headlineContent = { Text("Install updates automatically") },
                             supportingContent = { Text("Checks GitHub once a day and installs new releases. Otherwise you get a notification.") },
                             trailingContent = {
-                                Switch(checked = autoUpdate, onCheckedChange = { autoUpdate = it; Settings.setAutoUpdate(context, it) })
+                                Switch(checked = autoUpdate, onCheckedChange = { autoUpdate = it; Prefs.setAutoUpdate(context, it) })
                             },
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                         )

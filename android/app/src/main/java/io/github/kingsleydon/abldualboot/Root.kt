@@ -7,7 +7,10 @@ import java.io.File
 
 /** Root access through libsu, which works with any su provider (Magisk, KernelSU and forks, APatch). */
 object Root {
-    data class Result(val ok: Boolean, val output: String)
+    data class Result(val ok: Boolean, val output: String) {
+        /** Script output without the "! " prefix the device scripts put on errors. */
+        val error: String get() = output.removePrefix("! ").ifBlank { "Root access denied" }
+    }
 
     fun run(command: String): Result {
         if (!available()) return Result(false, "")

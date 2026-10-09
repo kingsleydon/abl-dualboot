@@ -11,11 +11,6 @@ dualboot = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(dualboot)
 
 
-def _env():
-    # Decky's bundled runtime sets library paths that system binaries (systemctl) must not inherit.
-    return {k: v for k, v in os.environ.items() if k not in ("LD_LIBRARY_PATH", "LD_PRELOAD")}
-
-
 def _info():
     mode, source = dualboot.status().split(" ")
     return {
@@ -40,7 +35,7 @@ class Plugin:
             decky.logger.error("switch failed: %s", e)
             return {"ok": False, "error": str(e)}
         decky.logger.info("default boot set to %s, restarting", result)
-        subprocess.Popen(["systemctl", "reboot"], env=_env())
+        subprocess.Popen(["systemctl", "reboot"])
         return {"ok": True}
 
     async def _main(self):
