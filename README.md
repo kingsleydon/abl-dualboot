@@ -59,7 +59,7 @@ Every part updates the way its platform intends:
 |---|---|
 | Android app | Built-in: checks this repo's releases daily and updates through Android's `PackageInstaller`. After you allow *Install unknown apps* once, updates install without prompts (or turn on *Install updates automatically*). You can also track it with [Obtainium](https://github.com/ImranR98/Obtainium). |
 | Decky plugin | Re-run the Linux installer for now; Decky's Plugin Store will handle it once the plugin is listed. |
-| Bundled ROCKNIX ABL | A weekly workflow opens a PR when ROCKNIX releases a new ABL, for review and testing. |
+| ROCKNIX ABL version | The app downloads a pinned release on demand; a weekly workflow opens a PR to update the pin when ROCKNIX releases a new ABL, for review and testing. |
 
 Downloads are checked against the SHA-256 digest GitHub publishes for each release file, releases are immutable,
 and Android only accepts an update signed with the same key.
@@ -105,9 +105,8 @@ their `qtestsign` signing certificate (the stock ABL is Qualcomm-signed), so a n
 - `decky/`: built from [decky-plugin-template](https://github.com/SteamDeckHomebrew/decky-plugin-template). `pnpm i && pnpm build`
 - `shared/`: the device scripts the app runs as root
 
-GitHub Actions builds everything; pushing a `v*` tag publishes a release. The ROCKNIX ABL is not stored here or
-bundled in the app: the app downloads the official release only when you install or restore the bootloader, and
-checks it against the SHA-256 pinned in `abl.properties`.
+GitHub Actions builds everything; pushing a `v*` tag publishes a release. The ROCKNIX ABL is downloaded only when you install or restore the bootloader, from the official release, and
+checked against the SHA-256 pinned in `abl.properties`.
 
 ## Verify a download
 

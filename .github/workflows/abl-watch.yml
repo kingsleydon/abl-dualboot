@@ -1,6 +1,6 @@
 name: Watch ROCKNIX ABL
 
-# Opens a PR when ROCKNIX publishes a new ABL release, with the new version and tarball checksum.
+# Opens a PR when ROCKNIX publishes a new ABL release, updating the version and checksum the app downloads.
 # Bootloader updates are never merged automatically: review and test before merging.
 on:
   schedule:
@@ -35,8 +35,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$branch"
-          git commit -am "Bundle ROCKNIX ABL $latest"
+          git commit -am "Update pinned ROCKNIX ABL to $latest"
           git push origin "$branch"
-          gh pr create --head "$branch" --title "Bundle ROCKNIX ABL $latest" --body "ROCKNIX released [ABL $latest](https://github.com/ROCKNIX/abl/releases/tag/$latest).
+          gh pr create --head "$branch" --title "Update pinned ROCKNIX ABL to $latest" --body "ROCKNIX released [ABL $latest](https://github.com/ROCKNIX/abl/releases/tag/$latest).
 
           This pins the new tarball in \`abl.properties\` (SHA-256 \`$sha\`; per-file checksums verified). Test the bootloader install/restore on a device before merging."
