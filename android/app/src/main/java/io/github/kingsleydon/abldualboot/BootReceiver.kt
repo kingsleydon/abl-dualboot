@@ -6,7 +6,7 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import androidx.core.app.NotificationCompat
+import android.app.Notification
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -31,7 +31,7 @@ class BootReceiver : BroadcastReceiver() {
         val open = PendingIntent.getActivity(
             context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE,
         )
-        nm.notify(1, NotificationCompat.Builder(context, CHANNEL)
+        nm.notify(1, Notification.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_tile)
             .setContentTitle("Linux boot menu was removed")
             .setContentText("A system update restored the stock bootloader. Tap to restore it.")

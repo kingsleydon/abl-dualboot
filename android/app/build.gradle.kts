@@ -53,7 +53,6 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.activity.compose)
-    implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.libsu.core)
     implementation(libs.androidx.work.runtime.ktx)

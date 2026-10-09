@@ -5,7 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import androidx.core.app.NotificationCompat
+import android.app.Notification
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -31,7 +31,7 @@ class UpdateWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         val nm = context.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CHANNEL, "Updates", NotificationManager.IMPORTANCE_LOW))
         val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
-        nm.notify(2, NotificationCompat.Builder(context, CHANNEL)
+        nm.notify(2, Notification.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_tile)
             .setContentTitle("ABL Dual Boot ${release.version} is available")
             .setContentText("Tap to update")

@@ -18,13 +18,6 @@ python3 -m zipfile -e "$TMP/linux.zip" "$TMP/linux"
 echo "- Checking devinfo (read-only)"
 python3 "$TMP/linux/dualboot.py" status
 
-# Remove the previous "Boot Switch" install (renamed to ABL Dual Boot in v2.0.0)
-rm -rf /etc/bootswitch /etc/sudoers.d/bootswitch
-if [ -n "${SUDO_USER:-}" ]; then
-  OLD_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
-  rm -rf "$OLD_HOME/homebrew/plugins/boot-switch"
-fi
-
 DIR=/etc/abl-dualboot
 touch /etc/.abl-dualboot-test 2>/dev/null && rm -f /etc/.abl-dualboot-test || DIR=/storage/.config/abl-dualboot
 install -d -m 0755 "$DIR"
@@ -44,7 +37,6 @@ if [ -n "$USER_NAME" ] && [ "$USER_NAME" != root ]; then
   install -d -o "$USER_NAME" "$APPS"
   sed "s#/etc/abl-dualboot/dualboot.py#$DIR/dualboot.py#" "$TMP/linux/reboot-to-android.desktop" > "$APPS/reboot-to-android.desktop"
   chown "$USER_NAME" "$APPS/reboot-to-android.desktop"; chmod 0755 "$APPS/reboot-to-android.desktop"
-  [ -f "$USER_HOME/Desktop/reboot-to-android.desktop" ] && install -o "$USER_NAME" -m 0755 "$APPS/reboot-to-android.desktop" "$USER_HOME/Desktop/"
   echo "- Added 'Reboot to Android' to the app menu"
   PLUGINS="$USER_HOME/homebrew/plugins"
 else

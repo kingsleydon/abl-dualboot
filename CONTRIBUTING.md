@@ -14,7 +14,7 @@ chip and setup you tried, and what worked.
 The ROCKNIX ABL binaries are not in this repo. CI downloads the official release and checks a pinned SHA-256;
 for local builds put them in `android/app/abl-assets/abl/`.
 
-## Changing the boot switch
+## Changing the switch logic
 
 `shared/dualboot.sh` (Android) and `linux/dualboot.py` (Linux) must behave identically and mirror the
 ROCKNIX ABL menu. Test them against copies of a real `devinfo`, never the live partition first:
