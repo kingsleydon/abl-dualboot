@@ -16,11 +16,11 @@ android {
         versionName = "1.0.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
     }
 
+    val keystore = System.getenv("KEYSTORE_FILE")?.takeIf { it.isNotEmpty() }
     signingConfigs {
         create("release") {
-            val ks = System.getenv("KEYSTORE_FILE")
-            if (ks != null) {
-                storeFile = file(ks)
+            if (keystore != null) {
+                storeFile = file(keystore)
                 storePassword = System.getenv("KEYSTORE_PASSWORD")
                 keyAlias = System.getenv("KEY_ALIAS")
                 keyPassword = System.getenv("KEYSTORE_PASSWORD")
@@ -33,7 +33,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = signingConfigs.getByName(if (keystore != null) "release" else "debug")
         }
     }
 
@@ -43,7 +43,7 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
-    sourceSets["main"].assets.srcDir("../../shared")
+    sourceSets["main"].assets.srcDirs("../../shared", "abl-assets")
 }
 
 dependencies {

@@ -1,4 +1,7 @@
 <resources>
     <string name="app_name">Boot Switch</string>
     <string name="tile_label">Boot to Linux</string>
+    <string name="confirm_title">Reboot to Linux?</string>
+    <string name="confirm_body">Sets Linux as the default boot target and restarts now. Switch back from Linux, or hold VOL- at power-on.</string>
+    <string name="reboot">Reboot</string>
 </resources>

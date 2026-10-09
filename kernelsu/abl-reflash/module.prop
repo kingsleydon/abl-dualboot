@@ -1,6 +1,0 @@
-id=rocknix_abl_reflash
-name=ROCKNIX ABL Reflash (SM8550)
-version=v1.2
-versionCode=1
-author=kingsleydon
-description=Tap Action after an Android OTA (before rebooting) to restore the ROCKNIX ABL. AYN Odin 2 Portal (SM8550) only.

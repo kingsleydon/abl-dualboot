@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -11,13 +12,33 @@ permissions:
 
 env:
   ABL_VERSION: v1.2
-  ABL_SM8550_SHA256: 8c27a70961476b327071ada2fd9b9c55dd2dcdc913eff3d33f2576133d7e398c
+  ABL_TARBALL_SHA256: 64034fb076ea0bb858beaa2f29dbef635e97d29f3e3d32c13bce61bd4af4cff7
 
 jobs:
+  abl:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download ROCKNIX ABL (official release, checksum pinned)
+        run: |
+          curl -fsSL -o abl.tar.gz "https://github.com/ROCKNIX/abl/releases/download/$ABL_VERSION/rocknix-abl-$ABL_VERSION.tar.gz"
+          echo "$ABL_TARBALL_SHA256  abl.tar.gz" | sha256sum -c
+          tar -xzf abl.tar.gz
+          mkdir abl && cp rocknix-abl-$ABL_VERSION/*.elf rocknix-abl-$ABL_VERSION/*.sha256 abl/
+          (cd abl && sha256sum -c *.sha256)
+      - uses: actions/upload-artifact@v7
+        with:
+          name: abl
+          path: abl/
+
   android:
+    needs: abl
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: abl
+          path: android/app/abl-assets/abl
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -26,42 +47,47 @@ jobs:
         with:
           gradle-version: 8.11.1
       - name: Decode signing key
+        if: github.event_name != 'pull_request'
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/release.jks"
       - name: Build release APK
         working-directory: android
         env:
-          KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+          KEYSTORE_FILE: ${{ github.event_name != 'pull_request' && format('{0}/release.jks', runner.temp) || '' }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
           gradle :app:assembleRelease --no-daemon
-          mkdir -p ../out && cp app/build/outputs/apk/release/app-release.apk ../out/BootSwitch.apk
+          mkdir -p ../out && cp app/build/outputs/apk/release/*.apk ../out/BootSwitch.apk
       - uses: actions/upload-artifact@v7
         with:
           name: android
           path: out/
 
   packages:
+    needs: abl
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-      - name: KernelSU module - Boot to Linux
+      - uses: actions/download-artifact@v8
+        with:
+          name: abl
+          path: abl
+      - name: Magisk / KernelSU / APatch modules
         run: |
           mkdir -p out
-          cp shared/bootswitch.sh kernelsu/boot-to-linux/
-          (cd kernelsu/boot-to-linux && zip -X ../../out/boot-to-linux-ksu.zip *)
-      - name: KernelSU module - ROCKNIX ABL Reflash (official ABL, checksum verified)
-        run: |
-          curl -fsSL "https://github.com/ROCKNIX/abl/releases/download/$ABL_VERSION/rocknix-abl-$ABL_VERSION.tar.gz" | tar -xz
-          cp "rocknix-abl-$ABL_VERSION/abl_signed-SM8550.elf" kernelsu/abl-reflash/abl.elf
-          echo "$ABL_SM8550_SHA256  kernelsu/abl-reflash/abl.elf" | sha256sum -c
-          (cd kernelsu/abl-reflash && zip -X ../../out/rocknix-abl-reflash-sm8550-ksu.zip *)
+          pack() { (cd "$1" && cp -r ../_magisk/META-INF . && zip -rX "../../out/$2" .); }
+          cp shared/bootswitch.sh modules/boot-to-linux/
+          pack modules/boot-to-linux boot-to-linux-module.zip
+          cp shared/abl.sh modules/abl-reflash/ && cp -r abl modules/abl-reflash/abl
+          pack modules/abl-reflash rocknix-abl-reflash-module.zip
       - name: Decky plugin
         run: |
-          mkdir -p pkg/boot-switch && cp -r decky/. pkg/boot-switch/
+          mkdir -p pkg/boot-switch && cp -r decky/. pkg/boot-switch/ && cp linux/bootswitch.py pkg/boot-switch/
           (cd pkg && zip -rX ../out/boot-switch-decky.zip boot-switch)
       - name: Linux scripts
-        run: (cd linux && zip -X ../out/bootswitch-linux.zip *)
+        run: |
+          (cd linux && zip -X ../out/bootswitch-linux.zip bootswitch.py reboot-to-android.desktop)
+          cp linux/install.sh out/install-linux.sh
       - uses: actions/upload-artifact@v7
         with:
           name: packages
@@ -74,9 +100,10 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
+          pattern: "{android,packages}"
           path: out
           merge-multiple: true
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes "See README for install steps and warnings."
+        run: gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes

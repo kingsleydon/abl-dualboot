@@ -1,0 +1,14 @@
+#!/sbin/sh
+# Magisk module installer (KernelSU and APatch use their own installer and ignore this).
+umask 022
+ui_print() { echo "$1"; }
+OUTFD=$2
+ZIPFILE=$3
+mount /data 2>/dev/null
+if [ ! -f /data/adb/magisk/util_functions.sh ]; then
+  ui_print "! Please install Magisk v20.4+ (or use KernelSU / APatch)"
+  exit 1
+fi
+. /data/adb/magisk/util_functions.sh
+install_module
+exit 0

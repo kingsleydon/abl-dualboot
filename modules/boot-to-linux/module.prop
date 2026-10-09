@@ -1,5 +1,5 @@
 id=rocknix_boot_to_linux
-name=Boot to Linux (ROCKNIX ABL)
+name=Boot to Linux
 version=v1.0
 versionCode=1
 author=kingsleydon

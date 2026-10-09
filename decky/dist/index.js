@@ -5,7 +5,8 @@ try { api = internalAPIConnection.connect(2, manifest.name); } catch { api = int
 const call = api.call;
 const toaster = api.toaster;
 
-const LABEL = { android: "Android", linux: "Linux (SD card)", unknown: "Unknown" };
+const SOURCE = { sd: " · SD card", internal: " · Internal", other: "" };
+const label = (t) => { const [mode, src] = (t || "unknown").split(" "); return mode === "android" ? "Android" : mode === "linux" ? "Linux" + (SOURCE[src] || "") : "Unknown"; };
 
 function Content() {
     const [target, setTarget] = SP_REACT.useState("unknown");
@@ -13,7 +14,7 @@ function Content() {
 
     const confirmReboot = () => DFL.showModal(SP_JSX.jsx(DFL.ConfirmModal, {
         strTitle: "Reboot to Android?",
-        strDescription: "Sets LineageOS as the default boot target and restarts now. Use the Boot Switch app or tile on Android (or hold VOL- at power-on) to come back.",
+        strDescription: "Sets LineageOS as the default boot target and restarts now. Use the Boot Switch app or tile on Android to come back (or hold VOL- at power-on).",
         strOKButtonText: "Reboot",
         onOK: async () => {
             const r = await call("reboot_to", "android");
@@ -23,7 +24,7 @@ function Content() {
 
     return SP_JSX.jsxs(DFL.PanelSection, { children: [
         SP_JSX.jsx(DFL.PanelSectionRow, { children:
-            SP_JSX.jsx(DFL.Field, { label: "Default boot", children: LABEL[target] || target }) }),
+            SP_JSX.jsx(DFL.Field, { label: "Default boot", children: label(target) }) }),
         SP_JSX.jsx(DFL.PanelSectionRow, { children:
             SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: confirmReboot, children: "Reboot to Android" }) }),
     ] });

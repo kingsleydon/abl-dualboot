@@ -17,7 +17,7 @@ class BootTileService : TileService() {
         qsTile?.apply {
             state = Tile.STATE_INACTIVE
             label = getString(R.string.tile_label)
-            subtitle = null
+            subtitle = if (Settings.linuxSource(this@BootTileService) == BootSource.INTERNAL) "Internal" else "SD card"
             updateTile()
         }
     }
@@ -28,13 +28,13 @@ class BootTileService : TileService() {
 
     private fun confirm() {
         val dialog = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle("Reboot to Linux?")
-            .setMessage("Sets Linux (SD card) as the default boot target and restarts now.")
+            .setTitle(R.string.confirm_title)
+            .setMessage(R.string.confirm_body)
             .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton("Reboot") { _, _ ->
+            .setPositiveButton(R.string.reboot) { _, _ ->
                 qsTile?.apply { state = Tile.STATE_ACTIVE; subtitle = "Rebooting…"; updateTile() }
                 scope.launch {
-                    BootSwitch.rebootToLinux(this@BootTileService)?.let { error ->
+                    Device.rebootToLinux(this@BootTileService, Settings.linuxSource(this@BootTileService))?.let { error ->
                         Toast.makeText(this@BootTileService, error, Toast.LENGTH_LONG).show()
                         onStartListening()
                     }
