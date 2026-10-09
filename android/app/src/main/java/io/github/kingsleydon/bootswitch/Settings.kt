@@ -12,6 +12,8 @@ object Settings {
         return Target(location, p.getString("last_name", "Linux")!!)
     }
 
-    fun setLastTarget(context: Context, target: Target) =
-        prefs(context).edit().putString("last_location", target.location).putString("last_name", target.name).apply()
+    /** Written synchronously: the device restarts right after this. */
+    fun setLastTarget(context: Context, target: Target) {
+        prefs(context).edit().putString("last_location", target.location).putString("last_name", target.name).commit()
+    }
 }
