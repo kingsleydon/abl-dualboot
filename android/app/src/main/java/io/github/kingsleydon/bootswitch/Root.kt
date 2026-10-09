@@ -2,21 +2,25 @@ package io.github.kingsleydon.bootswitch
 
 import android.content.Context
 import android.content.pm.PackageManager
+import com.topjohnwu.superuser.Shell
 import java.io.File
 
-/** Thin su wrapper that works with Magisk, KernelSU (and forks) and APatch - they all provide `su -c`. */
+/** Root access through libsu, which works with any su provider (Magisk, KernelSU and forks, APatch). */
 object Root {
     data class Result(val ok: Boolean, val output: String)
 
-    fun run(command: String): Result = try {
-        val process = ProcessBuilder("su", "-c", command).redirectErrorStream(true).start()
-        val output = process.inputStream.bufferedReader().readText().trim()
-        Result(process.waitFor() == 0, output)
-    } catch (e: Exception) {
-        Result(false, "")
+    fun run(command: String): Result {
+        if (!available()) return Result(false, "")
+        val r = Shell.cmd(command).exec()
+        return Result(r.isSuccess, r.out.joinToString("\n").trim())
     }
 
-    fun available(): Boolean = run("id").output.contains("uid=0")
+    fun available(): Boolean = Shell.getShell().isRoot
+
+    /** Drops a cached non-root shell so the next call asks for root again. */
+    fun retry() {
+        Shell.getCachedShell()?.takeIf { !it.isRoot }?.close()
+    }
 
     /** Copies a bundled asset to app storage (readable by root) and returns its path. */
     fun asset(context: Context, name: String): String {

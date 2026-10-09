@@ -127,7 +127,7 @@ private fun App(onAddTile: () -> Unit) {
             AnimatedContent(state, label = "state") { s ->
                 when (s) {
                     DeviceState.Loading -> Box(Modifier.fillMaxWidth().padding(48.dp), Alignment.Center) { CircularProgressIndicator() }
-                    is DeviceState.NoRoot -> NoRootCard(s.manager) { refresh() }
+                    is DeviceState.NoRoot -> NoRootCard(s.manager) { Root.retry(); refresh() }
                     is DeviceState.Ready -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         BootCard(s)
                         BootloaderCard(s.abl) { restore -> dialog = Dialog.InstallAbl(s.abl.soc, restore) }

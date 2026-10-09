@@ -15,6 +15,23 @@ env:
   ABL_TARBALL_SHA256: 64034fb076ea0bb858beaa2f29dbef635e97d29f3e3d32c13bce61bd4af4cff7
 
 jobs:
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      name: ${{ steps.v.outputs.name }}
+      code: ${{ steps.v.outputs.code }}
+    steps:
+      - id: v
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            name=${GITHUB_REF_NAME#v}
+            IFS=. read -r major minor patch <<< "$name"
+            code=$((major * 10000 + minor * 100 + patch))
+          else
+            name="0.0.0-dev.$GITHUB_RUN_NUMBER"; code=1
+          fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"; echo "code=$code" >> "$GITHUB_OUTPUT"
+
   abl:
     runs-on: ubuntu-24.04
     steps:
@@ -31,7 +48,7 @@ jobs:
           path: abl/
 
   android:
-    needs: abl
+    needs: [version, abl]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -44,8 +61,6 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v6
-        with:
-          gradle-version: 8.11.1
       - name: Decode signing key
         if: github.event_name != 'pull_request'
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/release.jks"
@@ -55,17 +70,51 @@ jobs:
           KEYSTORE_FILE: ${{ github.event_name != 'pull_request' && format('{0}/release.jks', runner.temp) || '' }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          VERSION_NAME: ${{ needs.version.outputs.name }}
+          VERSION_CODE: ${{ needs.version.outputs.code }}
         run: |
-          gradle :app:assembleRelease --no-daemon
+          ./gradlew :app:assembleRelease
           mkdir -p ../out && cp app/build/outputs/apk/release/*.apk ../out/BootSwitch.apk
       - uses: actions/upload-artifact@v7
         with:
           name: android
           path: out/
 
-  packages:
-    needs: abl
+  decky:
+    needs: version
     runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: decky/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: decky/pnpm-lock.yaml
+      - name: Build plugin
+        working-directory: decky
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+      - name: Package (decky-plugin-template layout)
+        run: |
+          P=pkg/boot-switch; mkdir -p $P/dist
+          cp decky/dist/index.js $P/dist/
+          cp decky/package.json decky/plugin.json decky/main.py decky/LICENSE linux/bootswitch.py $P/
+          mkdir -p out && (cd pkg && zip -rX ../out/boot-switch-decky.zip boot-switch)
+      - uses: actions/upload-artifact@v7
+        with:
+          name: decky
+          path: out/
+
+  modules:
+    needs: [version, abl]
+    runs-on: ubuntu-24.04
+    env:
+      VERSION_NAME: ${{ needs.version.outputs.name }}
+      VERSION_CODE: ${{ needs.version.outputs.code }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
@@ -75,32 +124,34 @@ jobs:
       - name: Magisk / KernelSU / APatch modules
         run: |
           mkdir -p out
-          pack() { (cd "$1" && cp -r ../_magisk/META-INF . && zip -rX "../../out/$2" .); }
           cp shared/bootswitch.sh modules/boot-to-linux/
-          pack modules/boot-to-linux boot-to-linux-module.zip
           cp shared/abl.sh modules/abl-reflash/ && cp -r abl modules/abl-reflash/abl
-          pack modules/abl-reflash rocknix-abl-reflash-module.zip
-      - name: Decky plugin
-        run: |
-          mkdir -p pkg/boot-switch && cp -r decky/. pkg/boot-switch/ && cp linux/bootswitch.py pkg/boot-switch/
-          (cd pkg && zip -rX ../out/boot-switch-decky.zip boot-switch)
+          for m in boot-to-linux abl-reflash; do
+            sed -i "s/^version=.*/version=v$VERSION_NAME/; s/^versionCode=.*/versionCode=$VERSION_CODE/" modules/$m/module.prop
+            cp -r modules/_magisk/META-INF modules/$m/
+            (cd modules/$m && zip -rX ../../out/$m-module.zip .)
+            jq -n --arg v "v$VERSION_NAME" --argjson c "$VERSION_CODE" \
+              --arg zip "https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION_NAME/$m-module.zip" \
+              --arg log "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/main/CHANGELOG.md" \
+              '{version: $v, versionCode: $c, zipUrl: $zip, changelog: $log}' > out/$m-module.json
+          done
       - name: Linux scripts
         run: |
           (cd linux && zip -X ../out/bootswitch-linux.zip bootswitch.py reboot-to-android.desktop)
           cp linux/install.sh out/install-linux.sh
       - uses: actions/upload-artifact@v7
         with:
-          name: packages
+          name: modules
           path: out/
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [android, packages]
+    needs: [android, decky, modules]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v8
         with:
-          pattern: "{android,packages}"
+          pattern: "{android,decky,modules}"
           path: out
           merge-multiple: true
       - name: Publish release
