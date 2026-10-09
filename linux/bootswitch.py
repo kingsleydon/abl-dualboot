@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 # Read or set the ROCKNIX ABL default boot target stored in devinfo, then reboot.
-# Usage: bootswitch.py status | android | linux [sd|internal]   (add --no-reboot to skip the reboot)
-# Writes only BootMode (0xA92) and BootSourceMode (0xAF0), the same two bytes the ABL menu changes.
+# Usage: bootswitch.py status | android | linux   (add --no-reboot to skip the reboot)
+#
+# Mirrors "Switch boot mode" in the ROCKNIX ABL v1.2 menu (LinuxLoader):
+#   BootMode       (0xA92): 0 = Linux, 1 = Android
+#   BootSourceMode (0xAF0): 0 = Internal, 1 = Auto, 2 = USB, 3 = SDcard
+#   Linux -> Android: BootMode=1, BootSourceMode reset to 0
+#   Android -> Linux: BootMode=0; if BootSourceMode is 0 and no Linux is installed after
+#                     userdata on internal storage, BootSourceMode=3 (SDcard)
+# Only these two bytes are written; anything else changing restores the original.
 import os, subprocess, sys
 
 DEV = os.environ.get("DEVINFO", "/dev/disk/by-partlabel/devinfo")
-SRC_SD = 0x03
-SRC_INTERNAL = None
 BOOT_MODE, BOOT_SOURCE = 0xA92, 0xAF0
+SOURCES = {0: "internal", 1: "auto", 2: "usb", 3: "sd"}
 
 
 def fail(msg):
@@ -23,8 +29,21 @@ def check(d):
         fail("devinfo layout not recognised - nothing written")
 
 
-def source_name(v):
-    return "sd" if v == SRC_SD else "internal" if v == SRC_INTERNAL else "other"
+def internal_linux():
+    """Linux installed internally = partitions after userdata on the same disk (how Armada/ROCKNIX install it)."""
+    ud = os.path.basename(os.path.realpath("/dev/disk/by-partlabel/userdata"))
+    try:
+        n = int(open(f"/sys/class/block/{ud}/partition").read())
+    except OSError:
+        return False
+    disk = os.path.basename(os.path.realpath(f"/sys/class/block/{ud}/.."))
+    for p in os.listdir(f"/sys/class/block/{disk}"):
+        try:
+            if int(open(f"/sys/class/block/{disk}/{p}/partition").read()) > n:
+                return True
+        except (OSError, ValueError):
+            pass
+    return False
 
 
 def main():
@@ -33,26 +52,20 @@ def main():
     with open(DEV, "r+b" if cmd in ("android", "linux") else "rb", buffering=0) as f:
         before = f.read(4096)
         check(before)
+        cur_source = before[BOOT_SOURCE]
+        linux_source = cur_source or (0 if internal_linux() else 3)
         if cmd == "status":
-            print(("android" if before[BOOT_MODE] == 1 else "linux"), source_name(before[BOOT_SOURCE]))
+            if before[BOOT_MODE] == 1:
+                print("android", SOURCES.get(linux_source, "unknown"))
+            else:
+                print("linux", SOURCES.get(cur_source, "unknown"))
             return
         if cmd == "android":
             mode, source = 1, 0
         elif cmd == "linux":
-            arg = args[1] if len(args) > 1 else ""
-            if arg == "sd":
-                source = SRC_SD
-            elif arg == "internal":
-                if SRC_INTERNAL is None:
-                    fail("internal boot source not supported yet")
-                source = SRC_INTERNAL
-            elif arg == "":
-                source = before[BOOT_SOURCE] or SRC_SD
-            else:
-                fail("boot source must be sd or internal")
-            mode = 0
+            mode, source = 0, linux_source
         else:
-            fail("usage: bootswitch.py status | android | linux [sd|internal] [--no-reboot]")
+            fail("usage: bootswitch.py status | android | linux [--no-reboot]")
 
         if (before[BOOT_MODE], before[BOOT_SOURCE]) != (mode, source):
             f.seek(BOOT_MODE); f.write(bytes([mode]))
@@ -64,7 +77,7 @@ def main():
         if not changed <= {BOOT_MODE, BOOT_SOURCE} or (after[BOOT_MODE], after[BOOT_SOURCE]) != (mode, source):
             f.seek(0); f.write(before); os.fsync(f.fileno())
             fail("verification failed - original devinfo restored, not rebooting")
-    print(f"{cmd} ok")
+    print(f"{cmd} {SOURCES.get(source, 'unknown')} ok")
     if "--no-reboot" not in sys.argv:
         subprocess.run(["systemctl", "reboot"])
 

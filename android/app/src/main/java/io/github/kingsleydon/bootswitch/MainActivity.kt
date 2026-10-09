@@ -41,9 +41,6 @@ import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -104,7 +101,6 @@ private fun App(onAddTile: () -> Unit) {
     var dialog by remember { mutableStateOf<Dialog?>(null) }
     var busy by remember { mutableStateOf(false) }
     var log by remember { mutableStateOf<String?>(null) }
-    var source by remember { mutableStateOf(Settings.linuxSource(context)) }
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     fun refresh() = scope.launch { state = DeviceState.Loading; state = Device.load(context) }
@@ -132,7 +128,6 @@ private fun App(onAddTile: () -> Unit) {
                         BootCard(s)
                         BootloaderCard(s.abl) { restore -> dialog = Dialog.InstallAbl(s.abl.soc, restore) }
                         log?.let { LogCard(it) }
-                        SourcePicker(source) { source = it; Settings.setLinuxSource(context, it) }
                         Button(
                             onClick = { dialog = Dialog.Reboot },
                             enabled = s.abl.installed && !busy,
@@ -164,7 +159,7 @@ private fun App(onAddTile: () -> Unit) {
             confirmButton = {
                 TextButton(onClick = {
                     dialog = null; busy = true
-                    scope.launch { log = Device.rebootToLinux(context, source)?.let { "! $it" }; busy = false }
+                    scope.launch { log = Device.rebootToLinux(context)?.let { "! $it" }; busy = false }
                 }) { Text(stringResource(R.string.reboot)) }
             },
             dismissButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
@@ -215,10 +210,10 @@ private fun BootCard(s: DeviceState.Ready) {
                 label = "Default boot",
                 value = when (s.target) {
                     BootTarget.ANDROID -> "Android"
-                    BootTarget.LINUX -> "Linux" + when (s.source) { BootSource.SD -> " · SD card"; BootSource.INTERNAL -> " · Internal"; else -> "" }
+                    BootTarget.LINUX -> "Linux"
                     BootTarget.UNKNOWN -> "Unknown"
                 },
-                detail = s.switchError,
+                detail = s.switchError ?: "Linux boots from ${s.source.label}",
             )
         }
     }
@@ -248,23 +243,6 @@ private fun BootloaderCard(abl: AblStatus, onInstall: (restore: Boolean) -> Unit
                         "Bootloader", "Stock bootloader", "Install the ROCKNIX ABL to dual-boot Linux (${abl.soc})")
                     OutlinedButton(onClick = { onInstall(false) }, Modifier.fillMaxWidth()) { Text("Install ROCKNIX ABL…") }
                 }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SourcePicker(selected: BootSource, onSelect: (BootSource) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Linux is installed on", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            listOf(BootSource.SD to "SD card", BootSource.INTERNAL to "Internal storage").forEachIndexed { i, (value, label) ->
-                SegmentedButton(
-                    selected = selected == value,
-                    onClick = { onSelect(value) },
-                    shape = SegmentedButtonDefaults.itemShape(i, 2),
-                ) { Text(label) }
             }
         }
     }

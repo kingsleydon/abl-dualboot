@@ -51,15 +51,22 @@ Modules update themselves from the manager app (`updateJson`).
 
 ## How it works
 
-The ROCKNIX ABL keeps its settings as named entries in `devinfo`. Picking a boot target in its menu changes two bytes:
+The ROCKNIX ABL keeps its settings as named entries in `devinfo`. The values below come from the ABL v1.2
+binary (LinuxLoader), whose menu code was disassembled to confirm them:
 
-| Default boot | `BootMode` @ `0xA92` | `BootSourceMode` @ `0xAF0` |
+| Setting | Offset | Values |
 |---|---|---|
-| Android | `01` | `00` |
-| Linux, SD card | `00` | `03` |
+| `BootMode` | `0xA92` | `0` Linux · `1` Android |
+| `BootSourceMode` | `0xAF0` | `0` Internal · `1` Auto · `2` USB · `3` SDcard |
 
-Boot Switch writes exactly the bytes the menu would. ROCKNIX ABL builds are recognised by their
-`qtestsign` signing certificate (the stock ABL is Qualcomm-signed), so a newer ROCKNIX ABL is never mistaken for stock.
+Boot Switch does exactly what the menu's **Switch boot mode** does:
+
+- **Linux → Android:** `BootMode=1`, `BootSourceMode` reset to `0`.
+- **Android → Linux:** `BootMode=0`. If `BootSourceMode` is `0` and no Linux is installed internally, `BootSourceMode=3` (SD card).
+  "Installed internally" means partitions follow `userdata` on the same disk, which is how Armada/ROCKNIX install to internal storage.
+
+So Linux on an **SD card or internal storage** both work without any setting. ROCKNIX ABL builds are recognised by
+their `qtestsign` signing certificate (the stock ABL is Qualcomm-signed), so a newer ROCKNIX ABL is never mistaken for stock.
 
 ## Build
 

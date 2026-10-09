@@ -17,7 +17,7 @@ class BootTileService : TileService() {
         qsTile?.apply {
             state = Tile.STATE_INACTIVE
             label = getString(R.string.tile_label)
-            subtitle = if (Settings.linuxSource(this@BootTileService) == BootSource.INTERNAL) "Internal" else "SD card"
+            subtitle = null
             updateTile()
         }
     }
@@ -34,7 +34,7 @@ class BootTileService : TileService() {
             .setPositiveButton(R.string.reboot) { _, _ ->
                 qsTile?.apply { state = Tile.STATE_ACTIVE; subtitle = "Rebooting…"; updateTile() }
                 scope.launch {
-                    Device.rebootToLinux(this@BootTileService, Settings.linuxSource(this@BootTileService))?.let { error ->
+                    Device.rebootToLinux(this@BootTileService)?.let { error ->
                         Toast.makeText(this@BootTileService, error, Toast.LENGTH_LONG).show()
                         onStartListening()
                     }

@@ -6,7 +6,7 @@ import { FaExchangeAlt } from "react-icons/fa";
 const getStatus = callable<[], string>("get_status");
 const rebootToAndroid = callable<[], { ok: boolean; error?: string }>("reboot_to_android");
 
-const SOURCE: Record<string, string> = { sd: " · SD card", internal: " · Internal" };
+const SOURCE: Record<string, string> = { sd: " · SD card", internal: " · Internal", usb: " · USB", auto: " · Auto" };
 
 function describe(status: string): string {
   const [mode, source] = status.split(" ");

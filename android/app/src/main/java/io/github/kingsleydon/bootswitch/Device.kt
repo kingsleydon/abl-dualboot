@@ -5,7 +5,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 enum class BootTarget { ANDROID, LINUX, UNKNOWN }
-enum class BootSource { SD, INTERNAL, OTHER }
+/** ROCKNIX ABL BootSourceMode: 0 = Internal, 1 = Auto, 2 = USB, 3 = SDcard. */
+enum class BootSource(val label: String) {
+    INTERNAL("internal storage"), AUTO("auto"), USB("USB"), SD("SD card"), UNKNOWN("unknown");
+
+    companion object {
+        fun of(name: String?) = when (name) { "internal" -> INTERNAL; "auto" -> AUTO; "usb" -> USB; "sd" -> SD; else -> UNKNOWN }
+    }
+}
 enum class AblKind { ROCKNIX, STOCK, UNKNOWN }
 
 data class AblStatus(val soc: String, val currentSlot: String, val slotA: AblKind, val slotB: AblKind) {
@@ -32,7 +39,7 @@ object Device {
         val words = switch.output.split(" ")
         DeviceState.Ready(
             target = when (words.firstOrNull()) { "android" -> BootTarget.ANDROID; "linux" -> BootTarget.LINUX; else -> BootTarget.UNKNOWN },
-            source = when (words.getOrNull(1)) { "sd" -> BootSource.SD; "internal" -> BootSource.INTERNAL; else -> BootSource.OTHER },
+            source = BootSource.of(words.getOrNull(1)),
             abl = abl,
             switchError = if (switch.ok) null else switch.output.removePrefix("! "),
         )
@@ -46,9 +53,8 @@ object Device {
     }
 
     /** Sets Linux as default boot target and reboots. Returns an error message, or null on success. */
-    suspend fun rebootToLinux(context: Context, source: BootSource? = null): String? = withContext(Dispatchers.IO) {
-        val arg = when (source) { BootSource.SD -> "sd"; BootSource.INTERNAL -> "internal"; else -> "" }
-        val r = Root.run("BOOTSWITCH_TMP='${context.cacheDir}' sh '${Root.asset(context, "bootswitch.sh")}' linux $arg")
+    suspend fun rebootToLinux(context: Context): String? = withContext(Dispatchers.IO) {
+        val r = Root.run("BOOTSWITCH_TMP='${context.cacheDir}' sh '${Root.asset(context, "bootswitch.sh")}' linux")
         if (!r.ok) return@withContext r.output.removePrefix("! ").ifBlank { "Root access denied" }
         Root.run("reboot")
         null
