@@ -179,6 +179,15 @@ class ShellTests(unittest.TestCase):
     def run_script(self, name, *args):
         return subprocess.run(["sh", str(self.root / name), *args], env=self.env, capture_output=True, text=True, check=False)
 
+    def inspections(self):
+        catalog = [(len((FIXTURES / "openabl-hash.bin").read_bytes()),
+                    hashlib.sha256((FIXTURES / "openabl-hash.bin").read_bytes()).hexdigest())]
+        args = []
+        for slot in ("a", "b"):
+            image = (self.root / f"abl_{slot}").read_bytes()[:1048576]
+            args += [str(len(image)), hashlib.sha256(image).hexdigest(), dualboot.abl_kind(image, catalog)]
+        return args
+
     def test_hash_precedes_signing_certificate_and_refuses_both_write_paths(self):
         for slot in ("a", "b"):
             path = self.root / f"abl_{slot}"
@@ -202,7 +211,10 @@ class ShellTests(unittest.TestCase):
     def test_legacy_classification_and_two_byte_switch_are_unchanged(self):
         (self.root / "abl_b").write_bytes((FIXTURES / "stock.bin").read_bytes())
         self.assertEqual("soc=SM8550 a=rocknix b=stock\n", self.run_script("abl.sh", "status").stdout)
-        result = self.run_script("dualboot.sh", "linux", "usb")
+        self.assertNotEqual(0, self.run_script("dualboot.sh", "linux", "usb", *self.inspections()).returncode)
+        self.assertEqual(devinfo(), (self.root / "devinfo").read_bytes())
+        (self.root / "abl_b").write_bytes((FIXTURES / "rocknix.bin").read_bytes())
+        result = self.run_script("dualboot.sh", "linux", "usb", *self.inspections())
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual("linux usb ok\n", result.stdout)
         expected = bytearray(devinfo())
@@ -214,11 +226,82 @@ class ShellTests(unittest.TestCase):
 
     def test_app_location_helpers_work_without_devinfo_but_legacy_targets_still_validate_it(self):
         (self.root / "devinfo").unlink()
+        (self.root / "abl_a").write_bytes((FIXTURES / "openabl-hash.bin").read_bytes())
         for command in ("locations", "internal"):
             result = self.run_script("dualboot.sh", command)
             self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("usb Linux", self.run_script("dualboot.sh", "locations").stdout)
         self.assertNotEqual(0, self.run_script("dualboot.sh", "targets").returncode)
+        (self.root / "abl.sh").unlink()
+        for command in ("locations", "internal"):
+            self.assertEqual(0, self.run_script("dualboot.sh", command).returncode)
+
+    def test_devinfo_mutations_refuse_missing_stale_and_malformed_inspections(self):
+        self.assertNotEqual(0, self.run_script("dualboot.sh", "linux", "usb").returncode)
+        args = self.inspections()
+        path = self.root / "abl_b"
+        original = path.read_bytes()
+        for changed in (bytes([original[0] ^ 1]) + original[1:], original + b"extra"):
+            path.write_bytes(changed)
+            result = self.run_script("dualboot.sh", "linux", "usb", *args)
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("changed since inspection", result.stderr)
+            self.assertEqual(devinfo(), (self.root / "devinfo").read_bytes())
+        path.write_bytes(original)
+        for index, value in ((0, "0"), (0, "1048577"), (0, "24;touch injected"),
+                             (1, "g" * 64), (1, args[1] + "\n"), (2, "rocknix;touch injected")):
+            invalid = args.copy()
+            invalid[index] = value
+            result = self.run_script("dualboot.sh", "linux", "usb", *invalid)
+            self.assertNotEqual(0, result.returncode)
+            self.assertEqual(devinfo(), (self.root / "devinfo").read_bytes())
+
+    def test_kotlin_openabl_and_unknown_classifications_block_both_mutation_paths(self):
+        for name in ("openabl-marker", "unknown"):
+            for slot in ("a", "b"):
+                path = self.root / f"abl_{slot}"
+                old = path.read_bytes()
+                path.write_bytes((FIXTURES / f"{name}.bin").read_bytes())
+                inspections = self.inspections()
+                for script, args in (
+                    ("dualboot.sh", ["linux", "usb", *inspections]),
+                    ("abl.sh", ["flash", "absent.elf", "0" * 64, str(self.root / "backup"), *inspections]),
+                ):
+                    result = self.run_script(script, *args)
+                    self.assertNotEqual(0, result.returncode)
+                    if name == "openabl-marker":
+                        self.assertIn("OpenABL is not supported yet", result.stderr)
+                    self.assertEqual(devinfo(), (self.root / "devinfo").read_bytes())
+                    self.assertFalse((self.root / "backup").exists())
+                path.write_bytes(old)
+
+    def test_flash_confirms_each_original_slot_just_before_its_write(self):
+        # Simulate block-device predicates only; all I/O stays on regular fixture files.
+        for slot, kind in (("a", "stock"), ("b", "rocknix")):
+            image = bytearray((FIXTURES / f"{kind}.bin").read_bytes() + bytes(512))
+            image[4] = 1
+            (self.root / f"abl_{slot}").write_bytes(image)
+        original_stock = (self.root / "abl_a").read_bytes()
+        inspections = self.inspections()
+        elf = FIXTURES / "rocknix.bin"
+        digest = hashlib.sha256(elf.read_bytes()).hexdigest()
+        (self.root / "blockdev").write_text('#!/bin/sh\n[ "$1" = --getsize64 ] || exit 1\nstat -c %s "$2"\n')
+        (self.root / "sync").write_text('#!/bin/sh\nexit 0\n')
+        for command in ("blockdev", "sync"):
+            (self.root / command).chmod(0o755)
+        wrapper = '''function [ {
+  if command [ "$1" = -b ]; then command [ -f "$2" ]; else command [ "$@"; fi
+}
+. "$0"
+'''
+        result = subprocess.run(["bash", "-c", wrapper, str(self.root / "abl.sh"), "flash", str(elf), digest,
+                                 str(self.root / "backup"), *inspections],
+                                env=self.env, capture_output=True, text=True, check=False)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("abl_b flashed and verified", result.stdout)
+        self.assertEqual(original_stock, (self.root / "backup/stock-abl_a.img").read_bytes())
+        for slot in ("a", "b"):
+            self.assertEqual(elf.read_bytes(), (self.root / f"abl_{slot}").read_bytes())
 
 
 if __name__ == "__main__":

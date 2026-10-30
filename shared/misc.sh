@@ -24,9 +24,12 @@ prefix_hash() {
 write_tail() {
   dd if="$1" of="$P" bs=1 seek="$OFFSET" count=4096 conv=notrunc,fsync 2>/dev/null
 }
+flush_cache() {
+  if [ -b "$P" ]; then blockdev --flushbufs "$P"; fi
+}
 restore() {
   trap - HUP INT TERM
-  if write_tail "$D/before.bin" && read_tail && cmp -s "$D/before.bin" "$D/check.bin"; then
+  if write_tail "$D/before.bin" && flush_cache && read_tail && cmp -s "$D/before.bin" "$D/check.bin"; then
     fail "verification failed - original misc store restored"
   fi
   fail "misc restore failed - do not reboot"
@@ -39,6 +42,7 @@ case "$1" in
     PREFIX=$(prefix_hash) || fail "cannot read misc prefix - nothing written"
     echo "$OFFSET $PREFIX" ;;
   write)
+    flush_cache || fail "cannot invalidate misc cache - nothing written"
     [ "$3" = "$OFFSET" ] || fail "misc size changed - nothing written"
     [ "$(wc -c < "$D/before.bin")" -eq 4096 ] &&
       [ "$(wc -c < "$D/next.bin")" -eq 4096 ] || fail "invalid misc edit size - nothing written"
@@ -48,6 +52,7 @@ case "$1" in
       fail "misc changed since inspection - nothing written"
     trap restore HUP INT TERM
     write_tail "$D/next.bin" || restore
+    flush_cache || restore
     read_tail && cmp -s "$D/next.bin" "$D/check.bin" || restore
     PREFIX=$(prefix_hash) && [ "$PREFIX" = "$4" ] || restore
     trap - HUP INT TERM

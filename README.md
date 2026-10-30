@@ -14,8 +14,10 @@ KernelSU Next, SukiSU, APatch**.
 v1.2 that stores settings in `misc` (main since
 [`71c0040`](https://github.com/OpenHandheldCollective/OpenABL/commit/71c0040)), booted at least once
 to initialize its settings store. Released OpenABL **v1.0–v1.2 are not supported**: they use UEFI variables.
-Switching is refused if either slot matches one of those releases, or the existing `misc` store is not
-valid version 1. ABL Dual Boot never creates or repairs this store. These rules apply to the Android app
+Both slots must be positively identified as OpenABL by their compressed markers, neither may match a
+released image, and the existing `misc` store must be valid version 1. Mixed or unidentified slots refuse
+OpenABL switching. Leftover EFI variables or a settings store cannot authorize it. ABL Dual Boot never
+creates or repairs this store. These rules apply to the Android app
 and tile, Linux launcher and Decky plugin. ROCKNIX installation and restoration remain blocked whenever
 OpenABL is present; Armada replaces ROCKNIX ABL with OpenABL at shutdown.
 
@@ -111,7 +113,11 @@ SD when Linux is not installed internally; an explicit location overrides it. Mi
 values use OpenABL's defaults (Linux and Auto). Other records are preserved, the `DeviceModel` header copy
 is refreshed, and the CRC is resealed. Linux uses Python's `zlib`; Android uses Kotlin's `java.util.zip.CRC32`
 with a root shell for bounded I/O. Both back up the store, sync and verify the full edited store and unchanged
-partition prefix, and restore the original store if verification fails. No bytes before the store are written.
+partition prefix, and restore the original store if verification fails. For real block devices, they preflight
+cache invalidation, then invalidate the device cache after fsync before both normal and rollback readback
+(`BLKFLSBUF`, using `blockdev --flushbufs` on Android). A denied or unavailable flush refuses the write;
+verification never falls back to cached reads. Fixture files use ordinary readback. No bytes before the store
+are written.
 
 ABL Dual Boot lists each place that has Linux (one per location, which is what the ABL supports):
 internal storage when partitions follow `userdata`, the SD card when one is inserted, and USB (which can only be
@@ -122,10 +128,12 @@ so its release prefix SHA-256 hashes are checked first. The shared catalog inclu
 OpenABL v1.0–v1.2 images and the historical hashes from
 [OpenABL-Android-Installer](https://github.com/OpenHandheldCollective/OpenABL-Android-Installer/tree/c9f9dbc).
 Python and the Android app also check the `OpenABL\0<version>\0` marker inside the LZMA firmware volume,
-with bounded input, memory and output. Android uses XZ for Java; the shell helpers use the hash catalog
-without decompressing firmware. Custom builds are therefore detected by the app and Python marker
-check, while standalone shell helpers recognise cataloged release images only. Linux also refuses when
-the running firmware's `LoaderInfo` or OpenABL `SettingsSchema` EFI variable identifies OpenABL.
+with bounded input, memory and output. Android uses XZ for Java; shell status checks use the hash catalog
+without decompressing firmware. Kotlin supplies each slot's classification, inspected prefix length and
+SHA-256 to shell mutations, which recheck those bytes immediately before writing. Devinfo writes require
+both slots confirmed ROCKNIX; bootloader flashing requires each slot confirmed ROCKNIX or stock. Missing,
+stale, unknown or OpenABL classifications refuse those writes. Linux's `LoaderInfo` and `SettingsSchema`
+EFI signals can refuse uncertain slots, but never enable the misc backend without both positive image checks.
 
 ## Build
 

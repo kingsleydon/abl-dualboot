@@ -33,6 +33,31 @@ class OpenAblTest {
         assertFalse(OpenAbl.hasMarker(ByteArray(1048576) + fixture("openabl-marker.bin")))
     }
 
+    @Test fun miscRequiresTwoPositivelyIdentifiedUnreleasedOpenAblSlots() {
+        val custom = OpenAbl.inspect(fixture("openabl-marker.bin"), catalog)
+        assertTrue(OpenAbl.canUseMisc(listOf(custom, custom)))
+        for (name in listOf("rocknix.bin", "stock.bin", "unknown.bin", "openabl-hash.bin")) {
+            val other = OpenAbl.inspect(fixture(name), catalog)
+            for (slots in listOf(listOf(custom, other), listOf(other, custom), listOf(other, other))) {
+                assertFalse(name, OpenAbl.canUseMisc(slots))
+            }
+        }
+        assertFalse(OpenAbl.canUseMisc(listOf(custom)))
+        assertFalse(OpenAbl.canUseMisc(emptyList()))
+        // A valid leftover store is not an input to image authorization.
+        val rocknix = OpenAbl.inspect(fixture("rocknix.bin"), catalog)
+        assertFalse(OpenAbl.canUseMisc(listOf(rocknix, rocknix)))
+    }
+
+    @Test fun inspectionArgumentsBindClassificationToTheExactInspectedPrefix() {
+        val image = fixture("openabl-marker.bin")
+        val inspection = OpenAbl.inspect(image, catalog)
+        assertEquals("${image.size} ${sha256(image)} openabl", inspection.arguments)
+        assertEquals(AblKind.OPENABL, inspection.kind)
+        assertTrue(inspection.miscCapable)
+        assertFalse(AblStatus("SM8550", inspection.kind, AblKind.STOCK).flashable)
+    }
+
     @Test fun releaseCatalogCoversEveryReleasedVersionAndChip() {
         val text = fixture("openabl-images.txt").toString(Charsets.US_ASCII)
         val rows = text.lines().filter { it.isNotBlank() && !it.startsWith("#") }.map { it.split(' ') }

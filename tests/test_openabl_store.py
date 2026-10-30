@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import importlib.util
 import os
+import stat
 from pathlib import Path
 import subprocess
 import sys
@@ -53,7 +54,8 @@ class MiscIntegrationTests(DeviceTestCase):
         p = patch.object(dualboot, "MISC", str(self.misc))
         p.start()
         self.addCleanup(p.stop)
-        (self.root / "abl_a").write_bytes((FIXTURES / "openabl-marker.bin").read_bytes())
+        for slot in ("a", "b"):
+            (self.root / f"abl_{slot}").write_bytes((FIXTURES / "openabl-marker.bin").read_bytes())
 
     def test_supported_status_switch_and_targets_leave_devinfo_and_prefix_untouched(self):
         original = self.device.read_bytes()
@@ -90,17 +92,76 @@ class MiscIntegrationTests(DeviceTestCase):
         self.assert_refused()
         self.assertFalse(self.misc.exists())
 
-    def test_runtime_efi_signal_can_identify_a_misc_build(self):
-        (self.root / "abl_a").write_bytes((FIXTURES / "unknown.bin").read_bytes())
-        signal = self.efivars / "SettingsSchema-8c5f2b7e-3a41-4d6c-9e2f-5b7a1c0d4e93"
-        signal.write_bytes(bytes(4) + b"\x01")
-        self.assertEqual("android internal", dualboot.status())
+    def test_leftover_efi_signals_and_valid_store_cannot_authorize_rocknix_slots(self):
+        for slot in ("a", "b"):
+            (self.root / f"abl_{slot}").write_bytes((FIXTURES / "rocknix.bin").read_bytes())
+        before = self.misc.read_bytes()
+        for name, value in (
+            ("SettingsSchema-8c5f2b7e-3a41-4d6c-9e2f-5b7a1c0d4e93", b"\x01"),
+            ("LoaderInfo-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f", "OpenABL 1.2\0".encode("utf-16-le")),
+        ):
+            signal = self.efivars / name
+            signal.write_bytes(bytes(4) + value)
+            self.assert_refused()
+            self.assertEqual(before, self.misc.read_bytes())
+            signal.unlink()
+
+    def test_mixed_or_missing_slots_refuse_even_with_a_valid_store(self):
+        before = self.misc.read_bytes()
+        for slot in ("a", "b"):
+            path = self.root / f"abl_{slot}"
+            for kind in ("rocknix", "stock", "unknown", None):
+                with self.subTest(slot=slot, kind=kind):
+                    if kind is None:
+                        path.unlink()
+                    else:
+                        path.write_bytes((FIXTURES / f"{kind}.bin").read_bytes())
+                    self.assert_refused()
+                    self.assertEqual(before, self.misc.read_bytes())
+                    path.write_bytes((FIXTURES / "openabl-marker.bin").read_bytes())
+
+    def test_leftover_store_alone_does_not_select_misc_for_rocknix(self):
+        for slot in ("a", "b"):
+            (self.root / f"abl_{slot}").write_bytes((FIXTURES / "rocknix.bin").read_bytes())
+        before = self.misc.read_bytes()
+        with patch.object(dualboot, "internal_linux", return_value=False):
+            self.assertEqual("linux sd", dualboot.switch("linux"))
+        self.assertEqual(before, self.misc.read_bytes())
 
     def test_fsync_failure_restores_original_store(self):
         before = self.misc.read_bytes()
         with patch.object(dualboot.os, "fsync", side_effect=[OSError("injected fsync failure"), None]):
             with self.assertRaisesRegex(dualboot.SwitchError, "original misc store restored"):
                 dualboot.switch("linux", "usb")
+        self.assertEqual(before, self.misc.read_bytes())
+
+    def test_regular_files_do_not_attempt_block_cache_invalidation(self):
+        with patch.object(dualboot.fcntl, "ioctl") as ioctl:
+            dualboot.switch("linux", "sd")
+        ioctl.assert_not_called()
+
+    def test_block_cache_preflight_failure_never_mutates(self):
+        before = self.misc.read_bytes()
+        with patch.object(dualboot.os, "fstat", return_value=Mock(st_mode=stat.S_IFBLK)), \
+                patch.object(dualboot.fcntl, "ioctl", side_effect=PermissionError("denied")) as ioctl:
+            with self.assertRaisesRegex(dualboot.SwitchError, "nothing written"):
+                dualboot.switch("linux", "sd")
+        self.assertEqual(before, self.misc.read_bytes())
+        self.assertEqual(1, ioctl.call_count)
+
+    def test_block_cache_is_invalidated_after_write_and_before_rollback_readback(self):
+        before = self.misc.read_bytes()
+        snapshots = []
+        def flush(fd, request):
+            self.assertEqual(0x1261, request)
+            snapshots.append(self.misc.read_bytes())
+            if len(snapshots) == 2:
+                raise OSError("injected post-write flush failure")
+        with patch.object(dualboot.os, "fstat", return_value=Mock(st_mode=stat.S_IFBLK)), \
+                patch.object(dualboot.fcntl, "ioctl", side_effect=flush):
+            with self.assertRaisesRegex(dualboot.SwitchError, "original misc store restored"):
+                dualboot.switch("linux", "sd")
+        self.assertEqual([before, self.prefix + STORES["linux-sd"], before], snapshots)
         self.assertEqual(before, self.misc.read_bytes())
 
     def test_full_store_never_writes(self):
@@ -138,14 +199,59 @@ class MiscShellTests(unittest.TestCase):
         self.prefix = b"untouched Android misc data" * 197
         self.partition.write_bytes(self.prefix + STORES["android-internal"])
         self.env = dict(os.environ, MISC=str(self.partition))
+        self.fake_block = False
         self.snapshot = self.run_script("read")
         self.assertEqual(0, self.snapshot.returncode, self.snapshot.stderr)
         self.next = STORES["linux-sd"]
         (self.root / "next.bin").write_bytes(self.next)
 
     def run_script(self, command, *args):
-        return subprocess.run(["sh", str(ROOT / "shared/misc.sh"), command, str(self.root), *args],
+        invocation = ["sh", str(ROOT / "shared/misc.sh"), command, str(self.root), *args]
+        if self.fake_block:
+            # Only simulate the block predicate. The root script still reads/writes this fixture file.
+            wrapper = '''function [ {
+  if command [ "$1" = -b ] && command [ "$2" = "$MISC" ]; then return 0; fi
+  command [ "$@"
+}
+. "$0"
+'''
+            invocation = ["bash", "-c", wrapper, *invocation[1:]]
+        return subprocess.run(invocation,
                               env=self.env, capture_output=True, text=True, check=False)
+
+    def simulate_block_cache(self, fail_at):
+        self.fake_block = True
+        blockdev = self.root / "blockdev"
+        blockdev.write_text('''#!/bin/sh
+case "$1" in
+  --getsize64) stat -c %s "$2" ;;
+  --flushbufs)
+    sha256sum "$2" | cut -d' ' -f1 >> "$MISC.flushes"
+    [ "$(wc -l < "$MISC.flushes")" != "$FAIL_FLUSH_AT" ] ;;
+  *) exit 1 ;;
+esac
+''')
+        blockdev.chmod(0o755)
+        self.env.update(PATH=str(self.root) + os.pathsep + os.environ["PATH"], FAIL_FLUSH_AT=str(fail_at))
+
+    def test_block_cache_preflight_failure_never_mutates(self):
+        original = self.partition.read_bytes()
+        self.simulate_block_cache(fail_at=1)
+        result = self.write()
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("cannot invalidate misc cache - nothing written", result.stderr)
+        self.assertEqual(original, self.partition.read_bytes())
+
+    def test_block_cache_flushes_preflight_write_and_rollback_before_verification(self):
+        original = self.partition.read_bytes()
+        self.simulate_block_cache(fail_at=2)
+        result = self.write()
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("original misc store restored", result.stderr)
+        snapshots = Path(str(self.partition) + ".flushes").read_text().splitlines()
+        self.assertEqual([hashlib.sha256(data).hexdigest() for data in
+                          (original, self.prefix + self.next, original)], snapshots)
+        self.assertEqual(original, self.partition.read_bytes())
 
     def write(self, digest=None):
         return self.run_script("write", *self.snapshot.stdout.split(), digest or hashlib.sha256(self.next).hexdigest())

@@ -15,13 +15,18 @@ data class Target(val location: String, val name: String) {
     val title get() = if (location == "usb") "Linux on USB" else name
 }
 
-data class AblStatus(val soc: String, val slotA: AblKind, val slotB: AblKind, val error: String? = null, val miscSupported: Boolean = false) {
+data class AblStatus(
+    val soc: String, val slotA: AblKind, val slotB: AblKind, val error: String? = null,
+    val miscSupported: Boolean = false, val inspections: List<OpenAbl.Inspection> = emptyList(),
+) {
     val openabl get() = slotA == AblKind.OPENABL || slotB == AblKind.OPENABL
     val blockingError get() = if (openabl && !miscSupported) OpenAbl.ERROR else error
     val supported get() = soc != "unknown"
     val installed get() = (openabl && miscSupported) || (slotA == AblKind.ROCKNIX && slotB == AblKind.ROCKNIX)
     /** One slot still has ROCKNIX but the other does not: a system update replaced it. */
     val replacedByUpdate get() = !openabl && !installed && (slotA == AblKind.ROCKNIX || slotB == AblKind.ROCKNIX)
+    val inspectionArgs get() = inspections.joinToString(" ") { it.arguments }
+    val flashable get() = inspections.size == 2 && inspections.all { it.kind == AblKind.ROCKNIX || it.kind == AblKind.STOCK }
 }
 
 sealed interface DeviceState {
@@ -38,7 +43,15 @@ object Device {
         val abl = ablStatus(context)
         abl.blockingError?.let { return Root.Result(false, it) }
         if (abl.openabl) return misc(context, args)
-        return Root.run("DUALBOOT_TMP='${context.cacheDir}' sh '${Root.asset(context, "dualboot.sh")}' $args")
+        val command = args.split(' ', limit = 2)
+        val location = command.getOrElse(1) { "" }
+        if (location.isNotEmpty() && location !in listOf("internal", "sd", "usb")) return Root.Result(false, "location must be sd, internal or usb")
+        val scriptArgs = when (command[0]) {
+            "status", "targets" -> command[0]
+            "android", "linux" -> "${command[0]} '$location' ${abl.inspectionArgs}"
+            else -> return Root.Result(false, "target must be android or linux")
+        }
+        return Root.run("DUALBOOT_TMP='${context.cacheDir}' sh '${Root.asset(context, "dualboot.sh")}' $scriptArgs")
     }
 
     /** Kotlin owns parsing/CRC; root only copies bounded bytes, syncs, compares and rolls back. */
@@ -108,9 +121,10 @@ object Device {
             if (!result.ok) return AblStatus("unknown", AblKind.UNKNOWN, AblKind.UNKNOWN, result.error)
             val fields = result.output.split(" ").mapNotNull { it.split("=").takeIf { kv -> kv.size == 2 }?.let { kv -> kv[0] to kv[1] } }.toMap()
             val images = files.map { it.readBytes() }
-            val kinds = images.map { OpenAbl.kind(it, catalog) }
-            val supported = AblKind.OPENABL in kinds && images.none { OpenAbl.released(it, catalog) } && misc(context, "status").ok
-            return AblStatus(fields["soc"] ?: "unknown", kinds[0], kinds[1], miscSupported = supported)
+            val inspections = images.map { OpenAbl.inspect(it, catalog) }
+            val supported = OpenAbl.canUseMisc(inspections) && misc(context, "status").ok
+            return AblStatus(fields["soc"] ?: "unknown", inspections[0].kind, inspections[1].kind,
+                miscSupported = supported, inspections = inspections)
         } catch (e: Exception) {
             return AblStatus("unknown", AblKind.UNKNOWN, AblKind.UNKNOWN, "Cannot inspect bootloader - nothing written")
         } finally {
@@ -136,6 +150,7 @@ object Device {
         val abl = ablStatus(context)
         if (abl.openabl) return@withContext Root.Result(false, OpenAbl.ERROR)
         abl.blockingError?.let { return@withContext Root.Result(false, it) }
+        if (!abl.flashable) return@withContext Root.Result(false, "Cannot identify both ABL slots - nothing written")
         val elf = try {
             AblRelease.extract(AblRelease.download(), soc)
         } catch (e: Exception) {
@@ -146,7 +161,8 @@ object Device {
             val current = ablStatus(context)
             if (current.openabl) return@withContext Root.Result(false, OpenAbl.ERROR)
             current.blockingError?.let { return@withContext Root.Result(false, it) }
-            Root.run("sh '${Root.asset(context, "abl.sh")}' flash '${file.absolutePath}' ${sha256(elf)} $BACKUP_DIR")
+            if (!current.flashable) return@withContext Root.Result(false, "Cannot identify both ABL slots - nothing written")
+            Root.run("DUALBOOT_TMP='${context.cacheDir}' sh '${Root.asset(context, "abl.sh")}' flash '${file.absolutePath}' ${sha256(elf)} $BACKUP_DIR ${current.inspectionArgs}")
         } finally {
             file.delete()
         }

@@ -1,7 +1,8 @@
 #!/system/bin/sh
 # ROCKNIX ABL helper.
 # Usage: abl.sh status [<inspection dir>]
-#        abl.sh flash <abl.elf> <sha256> <backup dir>
+#        abl.sh flash <abl.elf> <sha256> <backup dir> <a length> <a sha256> <a kind> <b length> <b sha256> <b kind>
+#        abl.sh verify switch|flash <a length> <a sha256> <a kind> <b length> <b sha256> <b kind>
 # OpenABL release hashes are checked first: OpenABL also carries qtestsign.
 # A slot is "rocknix" when its ELF carries the qtestsign certificate every ROCKNIX ABL build is signed with,
 # "stock" when it carries Qualcomm's. Stock slots are backed up before the first flash and never overwritten.
@@ -33,7 +34,37 @@ kind() {
   else echo unknown; fi
 }
 
-prefix_sha() { head -c "$2" "/dev/block/by-name/abl_$1" | sha256sum | cut -d' ' -f1; }
+prefix_sha() { head -c "$2" "$BYNAME/abl_$1" | sha256sum | cut -d' ' -f1; }
+
+# Kotlin's classification is mandatory and bound to the entire prefix it inspected (up to 1 MiB).
+confirm_slot() {
+  check_slot=$1; check_size=$2; check_sha=$3; check_kind=$4; check_mode=$5
+  case "$check_slot" in a|b) ;; *) fail "invalid ABL slot - nothing written" ;; esac
+  case "$check_size$check_sha$check_kind" in *[!a-z0-9]*) fail "invalid ABL inspection - nothing written" ;; esac
+  printf '%s %s %s\n' "$check_size" "$check_sha" "$check_kind" |
+    LC_ALL=C grep -Eq '^[1-9][0-9]{0,6} [0-9a-f]{64} (rocknix|stock|openabl|unknown)$' ||
+    fail "missing or invalid ABL inspection - nothing written"
+  [ "$check_size" -le 1048576 ] || fail "invalid ABL inspection length - nothing written"
+  [ "$check_kind" != openabl ] || fail "OpenABL is not supported yet - nothing written"
+  case "$check_mode:$check_kind" in
+    switch:rocknix|flash:rocknix|flash:stock) ;;
+    *) fail "ABL inspection does not authorize this write - nothing written" ;;
+  esac
+  check_file=$(mktemp "${DUALBOOT_TMP:-/data/local/tmp}/abl-confirm.XXXXXX") || fail "cannot create ABL inspection - write refused"
+  if ! head -c 1048576 "$BYNAME/abl_$check_slot" > "$check_file"; then
+    rm -f "$check_file"
+    fail "cannot read abl_$check_slot - write refused"
+  fi
+  check_actual_size=$(wc -c < "$check_file")
+  check_actual_sha=$(sha256sum "$check_file" | cut -d' ' -f1)
+  if openabl "$check_file"; then check_actual_kind=openabl
+  elif grep -q qtestsign "$check_file"; then check_actual_kind=rocknix
+  elif grep -q QUALCOMM "$check_file"; then check_actual_kind=stock
+  else check_actual_kind=unknown; fi
+  rm -f "$check_file"
+  [ "$check_actual_size" -eq "$check_size" ] && [ "$check_actual_sha" = "$check_sha" ] &&
+    [ "$check_actual_kind" = "$check_kind" ] || fail "ABL changed since inspection - write refused"
+}
 
 case "$1" in
   status)
@@ -44,29 +75,38 @@ case "$1" in
       done
     fi
     echo "soc=$(soc) a=$(kind a) b=$(kind b)" ;;
+  verify)
+    [ "$#" -eq 8 ] || fail "missing ABL inspection - nothing written"
+    confirm_slot a "$3" "$4" "$5" "$2"
+    confirm_slot b "$6" "$7" "$8" "$2" ;;
   flash)
     ELF=$2; SHA=$3; BAK=$4
     for s in a b; do
       [ "$(kind $s)" != openabl ] || fail "OpenABL is not supported yet - nothing written"
     done
+    [ "$#" -eq 10 ] || fail "missing ABL inspection - nothing written"
+    confirm_slot a "$5" "$6" "$7" flash
+    confirm_slot b "$8" "$9" "${10}" flash
     [ "$(soc)" != unknown ] || fail "unsupported SoC $(getprop ro.board.platform)"
-    [ -b /dev/block/by-name/abl_a ] && [ -b /dev/block/by-name/abl_b ] || fail "abl_a/abl_b partitions not found"
+    [ -b "$BYNAME/abl_a" ] && [ -b "$BYNAME/abl_b" ] || fail "abl_a/abl_b partitions not found"
     [ "$(sha256sum "$ELF" | cut -d' ' -f1)" = "$SHA" ] || fail "ABL file checksum mismatch"
     [ "$(head -c 4 "$ELF" | xxd -p)" = 7f454c46 ] || fail "ABL file is not an ELF"
     SIZE=$(stat -c %s "$ELF")
-    [ "$SIZE" -le "$(blockdev --getsize64 /dev/block/by-name/abl_a)" ] || fail "ABL file larger than partition"
+    [ "$SIZE" -le "$(blockdev --getsize64 "$BYNAME/abl_a")" ] || fail "ABL file larger than partition"
     mkdir -p "$BAK" || fail "cannot create backup folder"
     for s in a b; do
       if [ "$(kind $s)" = stock ] && [ ! -f "$BAK/stock-abl_$s.img" ]; then
-        dd if=/dev/block/by-name/abl_$s of="$BAK/stock-abl_$s.img" 2>/dev/null || fail "backup of abl_$s failed - nothing written"
+        dd if="$BYNAME/abl_$s" of="$BAK/stock-abl_$s.img" 2>/dev/null || fail "backup of abl_$s failed - nothing written"
         echo "- Backed up stock abl_$s to $BAK/stock-abl_$s.img"
       fi
     done
     for s in b a; do
       if [ "$(prefix_sha $s $SIZE)" = "$SHA" ]; then echo "- abl_$s already up to date"; continue; fi
-      dd if="$ELF" of=/dev/block/by-name/abl_$s bs=4096 conv=fsync 2>/dev/null
+      if [ "$s" = a ]; then confirm_slot a "$5" "$6" "$7" flash
+      else confirm_slot b "$8" "$9" "${10}" flash; fi
+      dd if="$ELF" of="$BYNAME/abl_$s" bs=4096 conv=fsync 2>/dev/null
       if [ "$(prefix_sha $s $SIZE)" = "$SHA" ]; then echo "- abl_$s flashed and verified"; continue; fi
-      [ -f "$BAK/stock-abl_$s.img" ] && dd if="$BAK/stock-abl_$s.img" of=/dev/block/by-name/abl_$s conv=fsync 2>/dev/null
+      [ -f "$BAK/stock-abl_$s.img" ] && dd if="$BAK/stock-abl_$s.img" of="$BYNAME/abl_$s" conv=fsync 2>/dev/null
       fail "abl_$s verification failed - slot restored from backup, do not reboot"
     done
     sync; echo "- Done" ;;

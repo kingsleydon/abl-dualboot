@@ -55,7 +55,7 @@ class OpenAblStoreTest {
     }
 
     @Test fun enablesSwitchingOnlyAfterTheGateAndStillPreventsOtaRestore() {
-        val supported = AblStatus("SM8550", AblKind.OPENABL, AblKind.STOCK, miscSupported = true)
+        val supported = AblStatus("SM8550", AblKind.OPENABL, AblKind.OPENABL, miscSupported = true)
         assertTrue(supported.installed)
         assertNull(supported.blockingError)
         assertFalse(supported.replacedByUpdate)

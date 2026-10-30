@@ -13,7 +13,7 @@
 #                     userdata on internal storage, BootSourceMode=3 (SDcard)
 # Only these two bytes are written; anything else changing restores the original.
 # OpenABL uses a validated, CRC-32 sealed store in misc's last 4096 bytes (see edit_store).
-import fcntl, hashlib, lzma, os, re, struct, subprocess, sys, zlib
+import fcntl, hashlib, lzma, os, re, stat, struct, subprocess, sys, zlib
 from pathlib import Path
 
 DEV = os.environ.get("DEVINFO", "/dev/disk/by-partlabel/devinfo")
@@ -90,15 +90,22 @@ def uses_openabl():
             if info.startswith("OpenABL "):
                 found = True
         catalog = openabl_catalog()
+        markers = []
         for slot in ("a", "b"):
             path = Path(BYNAME) / f"abl_{slot}"
+            marker = False
             if path.exists():
                 with path.open("rb", buffering=0) as f:
                     image = f.read(1048576)
                     if released_openabl(image, catalog):
                         raise SwitchError(OPENABL_ERROR)
-                    found = found or abl_kind(image, catalog) == "openabl"
-        return found
+                    marker = openabl_marker(image)
+            markers.append(marker)
+        if all(markers):
+            return True
+        if found or any(markers):
+            raise SwitchError(OPENABL_ERROR)
+        return False
     except OSError as e:
         raise SwitchError("cannot inspect bootloader - nothing written") from e
 
@@ -210,10 +217,18 @@ def prefix_hash(f, length):
     return digest.digest()
 
 
+def flush_misc_cache(f):
+    # BLKFLSBUF: flush and invalidate cached block-device pages before readback.
+    if stat.S_ISBLK(os.fstat(f.fileno()).st_mode):
+        fcntl.ioctl(f.fileno(), 0x1261)
+
+
 def switch_openabl(target, location):
     try:
         with open(MISC, "r+b", buffering=0) as f:
             fcntl.flock(f, fcntl.LOCK_EX)
+            # Preflight before mutation; a denied ioctl must never fall back to cached verification.
+            flush_misc_cache(f)
             offset, before = read_store(f)
             after, source = edit_store(before, target, location, internal_linux())
             prefix = prefix_hash(f, offset)
@@ -222,6 +237,7 @@ def switch_openabl(target, location):
                 if f.write(after) != 4096:
                     raise OSError("short write to misc")
                 os.fsync(f.fileno())
+                flush_misc_cache(f)
                 if read_store(f) != (offset, after) or prefix_hash(f, offset) != prefix:
                     raise SwitchError("misc verification failed")
             except (OSError, SwitchError) as e:
@@ -230,6 +246,7 @@ def switch_openabl(target, location):
                     if f.write(before) != 4096:
                         raise OSError("short restore to misc")
                     os.fsync(f.fileno())
+                    flush_misc_cache(f)
                     if read_store(f) != (offset, before):
                         raise OSError("misc restore mismatch")
                 except (OSError, SwitchError) as restore:

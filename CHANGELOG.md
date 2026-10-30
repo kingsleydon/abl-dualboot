@@ -4,6 +4,9 @@
 - Detect OpenABL before ROCKNIX, including OpenABL releases and custom builds in the Android app and Linux helper.
 - Add experimental switching for OpenABL builds after v1.2 that use the version 1 settings store in `misc` (main since 71c0040). Not device-verified.
 - Refuse switching for released OpenABL v1.0–v1.2 or an absent/invalid store; never create or repair a store. Installation and OTA restoration remain blocked for all OpenABL builds.
+- Require positive unreleased OpenABL identification in both slots for misc switching; refuse mixed slots and never authorize from leftover EFI variables or stores.
+- Bind Android shell mutations to Kotlin's per-slot classification and inspected prefix length/SHA-256. Require two ROCKNIX slots for devinfo writes, and ROCKNIX or stock for flashing.
+- Preflight block-device cache invalidation for misc writes, and invalidate after fsync before normal and rollback readback; refuse unavailable or denied flushes without cached fallback.
 - Preserve unrelated settings, reseal the model copy and CRC-32, and verify bounded writes with rollback. Share golden settings fixtures across Android and Python, including invalid stores and I/O failures.
 - Cover detection and refusal with shared Android/Python fixtures and shell tests.
 
