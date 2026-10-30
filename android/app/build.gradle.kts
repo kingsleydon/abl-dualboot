@@ -52,10 +52,12 @@ android {
         buildConfig = true
     }
     sourceSets["main"].assets.srcDirs("../../shared")
+    sourceSets["test"].resources.directories.addAll(listOf("../../tests/fixtures", "../../shared"))
 }
 
 dependencies {
     testImplementation(libs.junit)
+    implementation(libs.xz)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.core)

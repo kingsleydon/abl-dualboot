@@ -22,6 +22,7 @@ DIR=/etc/abl-dualboot
 touch /etc/.abl-dualboot-test 2>/dev/null && rm -f /etc/.abl-dualboot-test || DIR=/storage/.config/abl-dualboot
 install -d -m 0755 "$DIR"
 install -m 0755 "$TMP/linux/dualboot.py" "$DIR/dualboot.py"
+install -m 0644 "$TMP/linux/openabl-images.txt" "$DIR/openabl-images.txt"
 echo "- Installed $DIR/dualboot.py"
 
 USER_NAME=${SUDO_USER:-}

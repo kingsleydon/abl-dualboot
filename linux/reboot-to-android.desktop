@@ -2,7 +2,7 @@
 Type=Application
 Name=Reboot to Android
 Comment=Set the ROCKNIX ABL boot target to Android and reboot
-Exec=sudo /etc/abl-dualboot/dualboot.py android
+Exec=sh -c "sudo /etc/abl-dualboot/dualboot.py android || { echo; echo 'Press Enter to close.'; read answer; }"
 Icon=system-reboot
-Terminal=false
+Terminal=true
 Categories=System;

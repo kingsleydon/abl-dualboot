@@ -54,8 +54,15 @@ private fun Chooser(onDone: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        val found = withContext(Dispatchers.IO) { if (Root.available()) Device.targets(context) else emptyList() }
-        if (found.isEmpty()) error = Root.NO_ROOT
+        val found = withContext(Dispatchers.IO) {
+            if (!Root.available()) return@withContext emptyList()
+            val abl = Device.ablStatus(context)
+            if (abl.blockingError != null) {
+                error = abl.blockingError
+                emptyList()
+            } else Device.targets(context)
+        }
+        if (found.isEmpty() && error == null) error = Root.NO_ROOT
         val last = Prefs.lastTarget(context)
         targets = found
         selected = found.firstOrNull { it.location == last?.location } ?: found.firstOrNull()

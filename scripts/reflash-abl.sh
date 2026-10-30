@@ -17,6 +17,17 @@ SIZE=258048
 [ "$(shasum -a 256 "$ELF" | awk '{print $1}')" = $SHA ] || { echo "Local ABL checksum mismatch - aborting"; exit 1; }
 adb shell "su -c id" | grep -q 'uid=0' || { echo "No root (grant shell in KernelSU) - aborting"; exit 1; }
 
+# OpenABL uses qtestsign too; inspect release prefixes before staging or flashing anything.
+CATALOG=../shared/openabl-images.txt
+for s in a b; do
+  for n in $(sed '/^#/d' "$CATALOG" | cut -d' ' -f4 | sort -u); do
+    hash=$(adb exec-out "su -c 'head -c $n /dev/block/by-name/abl_$s'" | shasum -a 256 | awk '{print $1}')
+    if grep -q " $hash $n$" "$CATALOG"; then
+      echo "OpenABL is not supported yet - nothing written"; exit 1
+    fi
+  done
+done
+
 adb push "$ELF" /data/local/tmp/rocknix-abl.elf >/dev/null
 [ "$(adb shell sha256sum /data/local/tmp/rocknix-abl.elf | awk '{print $1}')" = $SHA ] || { echo "Pushed file corrupt - aborting"; exit 1; }
 echo "Checks OK. Flashing..."
