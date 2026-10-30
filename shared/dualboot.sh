@@ -95,9 +95,11 @@ case "$1" in
 esac
 
 [ "$#" -eq 4 ] || fail "missing ABL kinds - nothing written"
-case "$3$4" in *[!a-z]*) fail "invalid ABL kinds - nothing written" ;; esac
-case "$3 $4" in *openabl*) fail "OpenABL is not supported yet - nothing written" ;; esac
-printf '%s %s\n' "$3" "$4" | LC_ALL=C grep -Eq '^rocknix rocknix$' || fail "invalid ABL kinds - nothing written"
+case "$3:$4" in
+  rocknix:rocknix) ;;
+  openabl:*|*:openabl) fail "OpenABL is not supported yet - nothing written" ;;
+  *) fail "invalid ABL kinds - nothing written" ;;
+esac
 case "$ABL_STATUS" in *" a=rocknix b=rocknix") ;; *) fail "ROCKNIX ABL required - nothing written" ;; esac
 BEFORE=$(sha256sum "$P" | cut -d' ' -f1)
 cp "$P" "$TMP/devinfo-before-switch.img" || fail "cannot back up devinfo - nothing written"

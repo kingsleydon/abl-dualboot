@@ -54,9 +54,13 @@ case "$1" in
       esac
     done
     [ "$#" -eq 6 ] || fail "missing ABL kinds - nothing written"
-    case "$5$6" in *[!a-z]*) fail "invalid ABL kinds - nothing written" ;; esac
-    case "$5 $6" in *openabl*) fail "OpenABL is not supported yet - nothing written" ;; esac
-    printf '%s %s\n' "$5" "$6" | LC_ALL=C grep -Eq '^(rocknix|stock) (rocknix|stock)$' || fail "invalid ABL kinds - nothing written"
+    for kind in "$5" "$6"; do
+      case "$kind" in
+        rocknix|stock) ;;
+        openabl) fail "OpenABL is not supported yet - nothing written" ;;
+        *) fail "invalid ABL kinds - nothing written" ;;
+      esac
+    done
     [ "$(soc)" != unknown ] || fail "unsupported SoC $(getprop ro.board.platform)"
     [ -b "$BYNAME/abl_a" ] && [ -b "$BYNAME/abl_b" ] || fail "abl_a/abl_b partitions not found"
     [ "$(sha256sum "$ELF" | cut -d' ' -f1)" = "$SHA" ] || fail "ABL file checksum mismatch"
