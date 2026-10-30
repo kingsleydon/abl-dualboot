@@ -13,9 +13,7 @@ object OpenAbl {
     private val marker = Regex("OpenABL\u0000[0-9]+\\.[0-9]+\u0000")
 
     data class Image(val size: Int, val sha: String)
-    data class Inspection(val size: Int, val sha: String, val kind: AblKind, val miscCapable: Boolean) {
-        val arguments get() = "$size $sha ${kind.name.lowercase()}"
-    }
+    data class Inspection(val kind: AblKind, val miscCapable: Boolean)
 
     fun canUseMisc(slots: List<Inspection>) = slots.size == 2 && slots.all { it.miscCapable }
 
@@ -43,10 +41,8 @@ object OpenAbl {
             "QUALCOMM" in text -> AblKind.STOCK
             else -> AblKind.UNKNOWN
         }
-        return Inspection(image.size, sha256(image), kind, marker)
+        return Inspection(kind, marker)
     }
-
-    fun kind(image: ByteArray, catalog: List<Image>): AblKind = inspect(image, catalog).kind
 
     fun hasMarker(image: ByteArray): Boolean {
         val size = minOf(image.size, MAX_IMAGE)

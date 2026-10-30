@@ -62,8 +62,5 @@ class OpenAblStoreTest {
         val refused = supported.copy(miscSupported = false)
         assertFalse(refused.installed)
         assertEquals(OpenAbl.ERROR, refused.blockingError)
-        val catalog = OpenAbl.catalog(fixture("fixture-images.txt").toString(Charsets.US_ASCII))
-        assertTrue(OpenAbl.released(fixture("openabl-hash.bin") + ByteArray(4096), catalog))
-        assertFalse(OpenAbl.released(fixture("openabl-marker.bin"), catalog))
     }
 }

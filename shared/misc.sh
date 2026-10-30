@@ -1,6 +1,6 @@
 #!/system/bin/sh
-# Bounded I/O only; the app validates/edits OpenABL stores and CRC-32 in Kotlin.
-# Usage: misc.sh read <private dir> | write <private dir> <offset> <prefix sha256> <next sha256>
+# OpenABL store I/O; Kotlin handles the format and CRC-32.
+# Usage: misc.sh read <private dir> | write <private dir> <offset> <next sha256>
 # MISC overrides the partition path for fixture tests.
 P=${MISC:-/dev/block/by-name/misc}
 D=$2
@@ -15,11 +15,6 @@ OFFSET=$((SIZE - 4096))
 read_tail() {
   dd if="$P" of="$D/check.bin" bs=1 skip="$OFFSET" count=4096 2>/dev/null &&
     [ "$(wc -c < "$D/check.bin")" -eq 4096 ]
-}
-prefix_hash() {
-  head -c "$OFFSET" "$P" > "$D/prefix.bin" &&
-    [ "$(wc -c < "$D/prefix.bin")" -eq "$OFFSET" ] || return 1
-  sha256sum "$D/prefix.bin" | cut -d' ' -f1
 }
 write_tail() {
   dd if="$1" of="$P" bs=1 seek="$OFFSET" count=4096 conv=notrunc,fsync 2>/dev/null
@@ -39,23 +34,20 @@ case "$1" in
   read)
     read_tail || fail "cannot read misc - nothing written"
     cp "$D/check.bin" "$D/before.bin" || fail "cannot back up misc - nothing written"
-    PREFIX=$(prefix_hash) || fail "cannot read misc prefix - nothing written"
-    echo "$OFFSET $PREFIX" ;;
+    echo "$OFFSET" ;;
   write)
     flush_cache || fail "cannot invalidate misc cache - nothing written"
     [ "$3" = "$OFFSET" ] || fail "misc size changed - nothing written"
     [ "$(wc -c < "$D/before.bin")" -eq 4096 ] &&
       [ "$(wc -c < "$D/next.bin")" -eq 4096 ] || fail "invalid misc edit size - nothing written"
-    [ "$(sha256sum "$D/next.bin" | cut -d' ' -f1)" = "$5" ] || fail "misc edit checksum mismatch - nothing written"
-    PREFIX=$(prefix_hash) || fail "cannot read misc prefix - nothing written"
-    [ "$PREFIX" = "$4" ] && read_tail && cmp -s "$D/before.bin" "$D/check.bin" ||
+    [ "$(sha256sum "$D/next.bin" | cut -d' ' -f1)" = "$4" ] || fail "misc edit checksum mismatch - nothing written"
+    read_tail && cmp -s "$D/before.bin" "$D/check.bin" ||
       fail "misc changed since inspection - nothing written"
     trap restore HUP INT TERM
     write_tail "$D/next.bin" || restore
     flush_cache || restore
     read_tail && cmp -s "$D/next.bin" "$D/check.bin" || restore
-    PREFIX=$(prefix_hash) && [ "$PREFIX" = "$4" ] || restore
     trap - HUP INT TERM
     echo ok ;;
-  *) fail "usage: misc.sh read <dir> | write <dir> <offset> <prefix sha256> <next sha256>" ;;
+  *) fail "usage: misc.sh read <dir> | write <dir> <offset> <next sha256>" ;;
 esac

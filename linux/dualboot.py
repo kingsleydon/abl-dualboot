@@ -13,14 +13,13 @@
 #                     userdata on internal storage, BootSourceMode=3 (SDcard)
 # Only these two bytes are written; anything else changing restores the original.
 # OpenABL uses a validated, CRC-32 sealed store in misc's last 4096 bytes (see edit_store).
-import fcntl, hashlib, lzma, os, re, stat, struct, subprocess, sys, zlib
+import fcntl, hashlib, os, re, stat, struct, subprocess, sys, zlib
 from pathlib import Path
 
 DEV = os.environ.get("DEVINFO", "/dev/disk/by-partlabel/devinfo")
 BOOT_MODE, BOOT_SOURCE = 0xA92, 0xAF0
 SOURCES = {0: "internal", 1: "auto", 2: "usb", 3: "sd"}
 BYNAME = os.environ.get("ABL_BY_NAME", "/dev/disk/by-partlabel")
-EFIVARS = os.environ.get("EFIVARS", "/sys/firmware/efi/efivars")
 MISC = os.environ.get("MISC", "/dev/disk/by-partlabel/misc")
 OPENABL_SOURCES = {0: "auto", 1: "internal", 2: "sd", 3: "usb"}
 OPENABL_ERROR = "OpenABL is not supported yet - nothing written"
@@ -43,8 +42,7 @@ def openabl_catalog():
 
 
 def openabl_marker(image):
-    """OpenABL-Android-Installer's marker approach: a bounded LZMA firmware volume.
-    Inspect at most 1 MiB of input, 64 KiB of headers and 4 MiB of output."""
+    """Bounded LZMA firmware marker, as used by OpenABL-Android-Installer."""
     image = image[:1048576]
     for at in range(min(65536, len(image) - 12)):
         if image[at:at + 2] != b"\x5d\x00":
@@ -52,6 +50,10 @@ def openabl_marker(image):
         dictionary = int.from_bytes(image[at + 1:at + 5], "little")
         if not dictionary or dictionary & (dictionary - 1):
             continue
+        try:
+            import lzma
+        except ImportError as e:
+            raise SwitchError("cannot inspect bootloader: Python lacks lzma - nothing written") from e
         try:
             decoder = lzma.LZMADecompressor(format=lzma.FORMAT_ALONE, memlimit=64 << 20)
             data = decoder.decompress(image[at:], max_length=4 << 20)
@@ -68,27 +70,8 @@ def released_openabl(image, catalog):
     return any(hashes.get(size) == digest for size, digest in catalog)
 
 
-def abl_kind(image, catalog):
-    if released_openabl(image, catalog) or openabl_marker(image):
-        return "openabl"
-    if b"qtestsign" in image:
-        return "rocknix"
-    return "stock" if b"QUALCOMM" in image else "unknown"
-
-
 def uses_openabl():
-    # Same runtime signals used by Armada's openabl-updater/abl-version.
-    directory = Path(EFIVARS)
     try:
-        found = (directory / "SettingsSchema-8c5f2b7e-3a41-4d6c-9e2f-5b7a1c0d4e93").exists()
-        loader = directory / "LoaderInfo-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f"
-        if loader.exists():
-            try:
-                info = loader.read_bytes()[4:].decode("utf-16-le")
-            except UnicodeError:
-                info = ""
-            if info.startswith("OpenABL "):
-                found = True
         catalog = openabl_catalog()
         markers = []
         for slot in ("a", "b"):
@@ -103,7 +86,7 @@ def uses_openabl():
             markers.append(marker)
         if all(markers):
             return True
-        if found or any(markers):
+        if any(markers):
             raise SwitchError(OPENABL_ERROR)
         return False
     except OSError as e:
@@ -205,20 +188,8 @@ def openabl_store():
         raise SwitchError(OPENABL_ERROR) from e
 
 
-def prefix_hash(f, length):
-    f.seek(0)
-    digest = hashlib.sha256()
-    while length:
-        block = f.read(min(length, 65536))
-        if not block:
-            raise OSError("short read from misc")
-        digest.update(block)
-        length -= len(block)
-    return digest.digest()
-
-
 def flush_misc_cache(f):
-    # BLKFLSBUF: flush and invalidate cached block-device pages before readback.
+    # BLKFLSBUF invalidates block-device pages before readback.
     if stat.S_ISBLK(os.fstat(f.fileno()).st_mode):
         fcntl.ioctl(f.fileno(), 0x1261)
 
@@ -227,18 +198,18 @@ def switch_openabl(target, location):
     try:
         with open(MISC, "r+b", buffering=0) as f:
             fcntl.flock(f, fcntl.LOCK_EX)
-            # Preflight before mutation; a denied ioctl must never fall back to cached verification.
             flush_misc_cache(f)
             offset, before = read_store(f)
             after, source = edit_store(before, target, location, internal_linux())
-            prefix = prefix_hash(f, offset)
+            if read_store(f) != (offset, before):
+                raise SwitchError("misc changed since inspection - nothing written")
             try:
                 f.seek(offset)
                 if f.write(after) != 4096:
                     raise OSError("short write to misc")
                 os.fsync(f.fileno())
                 flush_misc_cache(f)
-                if read_store(f) != (offset, after) or prefix_hash(f, offset) != prefix:
+                if read_store(f) != (offset, after):
                     raise SwitchError("misc verification failed")
             except (OSError, SwitchError) as e:
                 try:

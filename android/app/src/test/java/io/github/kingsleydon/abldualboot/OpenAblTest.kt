@@ -18,14 +18,14 @@ class OpenAblTest {
             "stock.bin" to AblKind.STOCK,
             "unknown.bin" to AblKind.UNKNOWN,
             "invalid-lzma.bin" to AblKind.ROCKNIX,
-        )) assertEquals(name, expected, OpenAbl.kind(fixture(name), catalog))
+        )) assertEquals(name, expected, OpenAbl.inspect(fixture(name), catalog).kind)
     }
 
     @Test fun matchesAnImagePrefixWithPartitionPadding() {
         val image = fixture("openabl-hash.bin") + ByteArray(4096)
-        assertEquals(AblKind.OPENABL, OpenAbl.kind(image, catalog))
+        assertEquals(AblKind.OPENABL, OpenAbl.inspect(image, catalog).kind)
         image[5] = 1
-        assertEquals(AblKind.UNKNOWN, OpenAbl.kind(image, catalog))
+        assertEquals(AblKind.UNKNOWN, OpenAbl.inspect(image, catalog).kind)
     }
 
     @Test fun boundsMarkerDecompressionAndInput() {
@@ -44,18 +44,6 @@ class OpenAblTest {
         }
         assertFalse(OpenAbl.canUseMisc(listOf(custom)))
         assertFalse(OpenAbl.canUseMisc(emptyList()))
-        // A valid leftover store is not an input to image authorization.
-        val rocknix = OpenAbl.inspect(fixture("rocknix.bin"), catalog)
-        assertFalse(OpenAbl.canUseMisc(listOf(rocknix, rocknix)))
-    }
-
-    @Test fun inspectionArgumentsBindClassificationToTheExactInspectedPrefix() {
-        val image = fixture("openabl-marker.bin")
-        val inspection = OpenAbl.inspect(image, catalog)
-        assertEquals("${image.size} ${sha256(image)} openabl", inspection.arguments)
-        assertEquals(AblKind.OPENABL, inspection.kind)
-        assertTrue(inspection.miscCapable)
-        assertFalse(AblStatus("SM8550", inspection.kind, AblKind.STOCK).flashable)
     }
 
     @Test fun releaseCatalogCoversEveryReleasedVersionAndChip() {

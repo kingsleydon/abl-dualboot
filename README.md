@@ -10,16 +10,11 @@ Works with any Linux that boots through the ROCKNIX ABL (Armada, ROCKNIX, Batoce
 from an **SD card or internal storage**, and with every common root solution: **Magisk, KernelSU,
 KernelSU Next, SukiSU, APatch**.
 
-**OpenABL switching is experimental and has not been tested on a device.** It requires a build after
-v1.2 that stores settings in `misc` (main since
-[`71c0040`](https://github.com/OpenHandheldCollective/OpenABL/commit/71c0040)), booted at least once
-to initialize its settings store. Released OpenABL **v1.0–v1.2 are not supported**: they use UEFI variables.
-Both slots must be positively identified as OpenABL by their compressed markers, neither may match a
-released image, and the existing `misc` store must be valid version 1. Mixed or unidentified slots refuse
-OpenABL switching. Leftover EFI variables or a settings store cannot authorize it. ABL Dual Boot never
-creates or repairs this store. These rules apply to the Android app
-and tile, Linux launcher and Decky plugin. ROCKNIX installation and restoration remain blocked whenever
-OpenABL is present; Armada replaces ROCKNIX ABL with OpenABL at shutdown.
+**OpenABL switching is experimental and not device-tested.** It supports builds after v1.2 that keep
+settings in `misc` ([upstream change](https://github.com/OpenHandheldCollective/OpenABL/commit/71c0040));
+released v1.0–v1.2 are not supported. Both slots must have an OpenABL marker, neither may match a released
+image, and the existing settings store must be valid version 1. Mixed or unidentified slots refuse switching.
+The app never installs ROCKNIX over OpenABL.
 
 <a href="../../releases/latest/download/ABL-Dual-Boot.apk"><img alt="Download APK" src="https://img.shields.io/github/v/release/kingsleydon/abl-dualboot?label=Download%20APK&logo=android" height="28"></a>
 
@@ -106,34 +101,21 @@ ABL Dual Boot does exactly what the menu's **Switch boot mode** does:
 - **Android → Linux:** `BootMode=0`. If `BootSourceMode` is `0` and no Linux is installed internally, `BootSourceMode=3` (SD card).
   "Installed internally" means partitions follow `userdata` on the same disk, which is how Armada/ROCKNIX install to internal storage.
 
-Supported OpenABL builds keep a CRC-32 protected settings store in the last 4096 bytes of `misc`.
-`BootMode` is `0` Linux / `1` Android; `BootSource` is `0` Auto / `1` Internal / `2` SD / `3` USB.
-Switching to Android sets Internal. Switching to Linux keeps the source, except Internal falls back to
-SD when Linux is not installed internally; an explicit location overrides it. Missing or invalid setting
-values use OpenABL's defaults (Linux and Auto). Other records are preserved, the `DeviceModel` header copy
-is refreshed, and the CRC is resealed. Linux uses Python's `zlib`; Android uses Kotlin's `java.util.zip.CRC32`
-with a root shell for bounded I/O. Both back up the store, sync and verify the full edited store and unchanged
-partition prefix, and restore the original store if verification fails. For real block devices, they preflight
-cache invalidation, then invalidate the device cache after fsync before both normal and rollback readback
-(`BLKFLSBUF`, using `blockdev --flushbufs` on Android). A denied or unavailable flush refuses the write;
-verification never falls back to cached reads. Fixture files use ordinary readback. No bytes before the store
-are written.
+For OpenABL, switching follows its [settings rules](https://github.com/OpenHandheldCollective/OpenABL/blob/71c0040/Core/Settings.c)
+and [store format](https://github.com/OpenHandheldCollective/OpenABL/blob/71c0040/Core/SettingsStore.h).
+Only the last 4 KiB of `misc` is written; other settings are preserved, the model copy and CRC are refreshed,
+and the store is never created or repaired. Writes are backed up, synced, read back after block-cache
+invalidation, and restored on failure. Cache invalidation must succeed before writing.
 
 ABL Dual Boot lists each place that has Linux (one per location, which is what the ABL supports):
 internal storage when partitions follow `userdata`, the SD card when one is inserted, and USB (which can only be
 detected at boot). The name comes from the first partition's label (`ARMADA`, `ROCKNIX`, `BATOCERA`, ...).
 On the command line: `dualboot.py targets`, then `dualboot.py linux sd|internal|usb`. ROCKNIX ABL builds are recognised by
 their `qtestsign` signing certificate (the stock ABL is Qualcomm-signed). OpenABL also uses that certificate,
-so its release prefix SHA-256 hashes are checked first. The shared catalog includes all published
-OpenABL v1.0–v1.2 images and the historical hashes from
-[OpenABL-Android-Installer](https://github.com/OpenHandheldCollective/OpenABL-Android-Installer/tree/c9f9dbc).
-Python and the Android app also check the `OpenABL\0<version>\0` marker inside the LZMA firmware volume,
-with bounded input, memory and output. Android uses XZ for Java; shell status checks use the hash catalog
-without decompressing firmware. Kotlin supplies each slot's classification, inspected prefix length and
-SHA-256 to shell mutations, which recheck those bytes immediately before writing. Devinfo writes require
-both slots confirmed ROCKNIX; bootloader flashing requires each slot confirmed ROCKNIX or stock. Missing,
-stale, unknown or OpenABL classifications refuse those writes. Linux's `LoaderInfo` and `SettingsSchema`
-EFI signals can refuse uncertain slots, but never enable the misc backend without both positive image checks.
+so its release prefix hashes are checked first using the shared catalog of v1.0–v1.2 images and historical
+[installer hashes](https://github.com/OpenHandheldCollective/OpenABL-Android-Installer/tree/c9f9dbc).
+The app and Python also check the compressed OpenABL marker with bounded input, memory and output.
+Android shell writes require Kotlin's slot classifications: ROCKNIX for switching, ROCKNIX or stock for flashing.
 
 ## Build
 
@@ -144,8 +126,8 @@ EFI signals can refuse uncertain slots, but never enable the misc backend withou
 Run `python3 -m unittest discover -s tests -v` for Python and shell checks, and
 `cd android && ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleRelease` for Android.
 The Android and Python tests share small synthetic firmware and settings-store fixtures; no device partitions
-are touched. `MISC`, `DEVINFO` and `ABL_BY_NAME` override partition paths for fixture testing (Linux also
-accepts `EFIVARS`); do not point test runs at real partitions.
+are touched. `MISC`, `DEVINFO` and `ABL_BY_NAME` override partition paths for fixture testing; do not point
+test runs at real partitions.
 
 GitHub Actions builds everything; pushing a `v*` tag publishes a release. The ROCKNIX ABL is downloaded only when you install or restore the bootloader, from the official release, and
 checked against the SHA-256 pinned in `abl.properties`.

@@ -92,20 +92,6 @@ class MiscIntegrationTests(DeviceTestCase):
         self.assert_refused()
         self.assertFalse(self.misc.exists())
 
-    def test_leftover_efi_signals_and_valid_store_cannot_authorize_rocknix_slots(self):
-        for slot in ("a", "b"):
-            (self.root / f"abl_{slot}").write_bytes((FIXTURES / "rocknix.bin").read_bytes())
-        before = self.misc.read_bytes()
-        for name, value in (
-            ("SettingsSchema-8c5f2b7e-3a41-4d6c-9e2f-5b7a1c0d4e93", b"\x01"),
-            ("LoaderInfo-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f", "OpenABL 1.2\0".encode("utf-16-le")),
-        ):
-            signal = self.efivars / name
-            signal.write_bytes(bytes(4) + value)
-            self.assert_refused()
-            self.assertEqual(before, self.misc.read_bytes())
-            signal.unlink()
-
     def test_mixed_or_missing_slots_refuse_even_with_a_valid_store(self):
         before = self.misc.read_bytes()
         for slot in ("a", "b"):
@@ -270,7 +256,7 @@ esac
         self.assertNotEqual(0, self.write().returncode)
         self.assertEqual(original, self.partition.read_bytes())
         (self.root / "next.bin").write_bytes(self.next)
-        for changed in (bytes([original[0] ^ 1]) + original[1:], self.prefix + STORES["linux-usb"]):
+        for changed in (original + b"extra", self.prefix + STORES["linux-usb"]):
             self.partition.write_bytes(changed)
             self.assertNotEqual(0, self.write().returncode)
             self.assertEqual(changed, self.partition.read_bytes())

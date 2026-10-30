@@ -60,7 +60,7 @@ private fun Chooser(onDone: () -> Unit) {
             if (abl.blockingError != null) {
                 error = abl.blockingError
                 emptyList()
-            } else Device.targets(context)
+            } else Device.targets(context, abl)
         }
         if (found.isEmpty() && error == null) error = Root.NO_ROOT
         val last = Prefs.lastTarget(context)

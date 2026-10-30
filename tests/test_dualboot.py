@@ -26,35 +26,6 @@ def devinfo():
     return bytes(data)
 
 
-class DetectionTests(unittest.TestCase):
-    def setUp(self):
-        data = (FIXTURES / "openabl-hash.bin").read_bytes()
-        self.catalog = [(len(data), hashlib.sha256(data).hexdigest())]
-
-    def test_classifies_all_kinds_before_signing_certificates(self):
-        for name, kind in (("openabl-hash", "openabl"), ("openabl-marker", "openabl"),
-                           ("rocknix", "rocknix"), ("stock", "stock"),
-                           ("unknown", "unknown"), ("invalid-lzma", "rocknix")):
-            with self.subTest(name=name):
-                self.assertEqual(kind, dualboot.abl_kind((FIXTURES / f"{name}.bin").read_bytes(), self.catalog))
-
-    def test_prefix_hash_ignores_partition_padding_but_not_image_changes(self):
-        data = (FIXTURES / "openabl-hash.bin").read_bytes() + bytes(4096)
-        self.assertEqual("openabl", dualboot.abl_kind(data, self.catalog))
-        self.assertNotEqual("openabl", dualboot.abl_kind(bytes([0]) + data[1:], self.catalog))
-
-    def test_marker_decompression_is_bounded(self):
-        self.assertFalse(dualboot.openabl_marker((FIXTURES / "oversized-marker.bin").read_bytes()))
-        self.assertFalse(dualboot.openabl_marker(bytes(1048576) + (FIXTURES / "openabl-marker.bin").read_bytes()))
-
-    def test_release_catalog_includes_all_chips_and_historical_hash(self):
-        rows = [line.split() for line in (ROOT / "shared/openabl-images.txt").read_text().splitlines()
-                if line and not line.startswith("#")]
-        self.assertEqual(28, len(dualboot.openabl_catalog()))
-        for version in ("1.0", "1.1", "1.2"):
-            self.assertEqual(9, len({chip for v, chip, _, _ in rows if v == version}))
-
-
 class DeviceTestCase(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="abl-dualboot-test-")
@@ -64,13 +35,12 @@ class DeviceTestCase(unittest.TestCase):
         self.device.write_bytes(devinfo())
         for slot in ("a", "b"):
             (self.root / f"abl_{slot}").write_bytes((FIXTURES / "rocknix.bin").read_bytes())
-        self.efivars = self.root / "efivars"
-        self.efivars.mkdir()
-        for name, value in (("DEV", str(self.device)), ("BYNAME", str(self.root)), ("EFIVARS", str(self.efivars)),
+        for name, value in (("DEV", str(self.device)), ("BYNAME", str(self.root)),
                             ("MISC", str(self.root / "misc"))):
             p = patch.object(dualboot, name, value)
             p.start()
             self.addCleanup(p.stop)
+        self.real_catalog = dualboot.openabl_catalog
         image = (FIXTURES / "openabl-hash.bin").read_bytes()
         p = patch.object(dualboot, "openabl_catalog", return_value=[(len(image), hashlib.sha256(image).hexdigest())])
         p.start()
@@ -81,6 +51,49 @@ class DeviceTestCase(unittest.TestCase):
             with self.assertRaisesRegex(dualboot.SwitchError, "OpenABL is not supported yet"):
                 action()
         self.assertEqual(devinfo(), self.device.read_bytes())
+
+
+class DetectionTests(DeviceTestCase):
+    def test_slot_gate_uses_hashes_before_markers(self):
+        for name, expected in (("openabl-marker", True), ("rocknix", False), ("stock", False),
+                               ("unknown", False), ("invalid-lzma", False)):
+            with self.subTest(name=name):
+                for slot in ("a", "b"):
+                    (self.root / f"abl_{slot}").write_bytes((FIXTURES / f"{name}.bin").read_bytes())
+                self.assertEqual(expected, dualboot.uses_openabl())
+
+    def test_release_hash_ignores_partition_padding_but_not_image_changes(self):
+        data = (FIXTURES / "openabl-hash.bin").read_bytes() + bytes(4096)
+        for slot in ("a", "b"):
+            path = self.root / f"abl_{slot}"
+            path.write_bytes(data)
+            self.assert_refused()
+            path.write_bytes(bytes([0]) + data[1:])
+        self.assertFalse(dualboot.uses_openabl())
+
+    def test_missing_lzma_refuses_only_when_marker_inspection_is_needed(self):
+        before = self.device.read_bytes()
+        with patch.dict(sys.modules, {"lzma": None}):
+            self.assertFalse(dualboot.uses_openabl())
+            (self.root / "abl_a").write_bytes((FIXTURES / "openabl-hash.bin").read_bytes())
+            self.assert_refused()
+            (self.root / "abl_a").write_bytes((FIXTURES / "openabl-marker.bin").read_bytes())
+            with self.assertRaisesRegex(dualboot.SwitchError, "cannot inspect bootloader: Python lacks lzma - nothing written"):
+                dualboot.switch("linux")
+        self.assertEqual(before, self.device.read_bytes())
+
+    def test_marker_decompression_is_bounded(self):
+        self.assertFalse(dualboot.openabl_marker((FIXTURES / "oversized-marker.bin").read_bytes()))
+        self.assertFalse(dualboot.openabl_marker(bytes(1048576) + (FIXTURES / "openabl-marker.bin").read_bytes()))
+
+    def test_release_catalog_includes_all_chips_and_historical_hash(self):
+        rows = [line.split() for line in (ROOT / "shared/openabl-images.txt").read_text().splitlines()
+                if line and not line.startswith("#")]
+        # Read the actual catalog rather than the fixture override.
+        with patch.object(dualboot, "openabl_catalog", self.real_catalog):
+            self.assertEqual(28, len(dualboot.openabl_catalog()))
+        for version in ("1.0", "1.1", "1.2"):
+            self.assertEqual(9, len({chip for v, chip, _, _ in rows if v == version}))
 
 
 class RefusalTests(DeviceTestCase):
@@ -94,41 +107,12 @@ class RefusalTests(DeviceTestCase):
                     self.assert_refused()
                     path.write_bytes(before)
 
-    def test_refuses_running_openabl_from_either_efivar_signal(self):
-        for name, value in (
-            ("SettingsSchema-8c5f2b7e-3a41-4d6c-9e2f-5b7a1c0d4e93", b"\x01"),
-            ("LoaderInfo-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f", "OpenABL 1.2\0".encode("utf-16-le")),
-        ):
-            with self.subTest(name=name):
-                path = self.efivars / name
-                path.write_bytes(bytes(4) + value)
-                self.assert_refused()
-                path.unlink()
-
     def test_cli_exits_without_rebooting(self):
         (self.root / "abl_b").write_bytes((FIXTURES / "openabl-marker.bin").read_bytes())
         with patch.object(sys, "argv", ["dualboot.py", "android"]), patch.object(subprocess, "run") as reboot:
             with self.assertRaisesRegex(SystemExit, "OpenABL is not supported yet"):
                 dualboot.main()
             reboot.assert_not_called()
-
-    def test_malformed_loader_info_does_not_block_rocknix(self):
-        loader = self.efivars / "LoaderInfo-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f"
-        with patch.object(dualboot, "internal_linux", return_value=False):
-            for value in (b"\xff", b"\x00\xd8", "OpenABL 1.2".encode("utf-16-le") + b"\xff"):
-                with self.subTest(value=value):
-                    loader.write_bytes(bytes(4) + value)
-                    self.device.write_bytes(devinfo())
-                    self.assertEqual("android sd", dualboot.status())
-                    self.assertEqual("linux sd", dualboot.switch("linux"))
-                    expected = bytearray(devinfo())
-                    expected[dualboot.BOOT_MODE] = 0
-                    expected[dualboot.BOOT_SOURCE] = 3
-                    self.assertEqual(bytes(expected), self.device.read_bytes())
-                    self.device.write_bytes(devinfo())
-                    (self.root / "abl_b").write_bytes((FIXTURES / "openabl-marker.bin").read_bytes())
-                    self.assert_refused()
-                    (self.root / "abl_b").write_bytes((FIXTURES / "rocknix.bin").read_bytes())
 
     def test_decky_reports_error_without_rebooting(self):
         (self.root / "abl_a").write_bytes((FIXTURES / "openabl-marker.bin").read_bytes())
@@ -179,15 +163,6 @@ class ShellTests(unittest.TestCase):
     def run_script(self, name, *args):
         return subprocess.run(["sh", str(self.root / name), *args], env=self.env, capture_output=True, text=True, check=False)
 
-    def inspections(self):
-        catalog = [(len((FIXTURES / "openabl-hash.bin").read_bytes()),
-                    hashlib.sha256((FIXTURES / "openabl-hash.bin").read_bytes()).hexdigest())]
-        args = []
-        for slot in ("a", "b"):
-            image = (self.root / f"abl_{slot}").read_bytes()[:1048576]
-            args += [str(len(image)), hashlib.sha256(image).hexdigest(), dualboot.abl_kind(image, catalog)]
-        return args
-
     def test_hash_precedes_signing_certificate_and_refuses_both_write_paths(self):
         for slot in ("a", "b"):
             path = self.root / f"abl_{slot}"
@@ -197,9 +172,10 @@ class ShellTests(unittest.TestCase):
             status = self.run_script("abl.sh", "status")
             self.assertEqual(0, status.returncode, status.stderr)
             self.assertIn(f"{slot}=openabl", status.stdout)
-            for script, args in (("abl.sh", ("flash", "absent.elf", "bad-hash", str(self.root / "backup"))),
+            for script, args in (("abl.sh", ("flash", "absent.elf", "bad-hash", str(self.root / "backup"), "rocknix", "rocknix")),
                                  ("dualboot.sh", ("status",)), ("dualboot.sh", ("targets",)),
-                                 ("dualboot.sh", ("android",)), ("dualboot.sh", ("linux", "usb"))):
+                                 ("dualboot.sh", ("android", "", "rocknix", "rocknix")),
+                                 ("dualboot.sh", ("linux", "usb", "rocknix", "rocknix"))):
                 result = self.run_script(script, *args)
                 self.assertNotEqual(0, result.returncode)
                 self.assertIn("OpenABL is not supported yet", result.stderr)
@@ -211,10 +187,11 @@ class ShellTests(unittest.TestCase):
     def test_legacy_classification_and_two_byte_switch_are_unchanged(self):
         (self.root / "abl_b").write_bytes((FIXTURES / "stock.bin").read_bytes())
         self.assertEqual("soc=SM8550 a=rocknix b=stock\n", self.run_script("abl.sh", "status").stdout)
-        self.assertNotEqual(0, self.run_script("dualboot.sh", "linux", "usb", *self.inspections()).returncode)
+        self.assertNotEqual(0, self.run_script("dualboot.sh", "linux", "usb", "rocknix", "stock").returncode)
+        self.assertNotEqual(0, self.run_script("dualboot.sh", "linux", "usb", "rocknix", "rocknix").returncode)
         self.assertEqual(devinfo(), (self.root / "devinfo").read_bytes())
         (self.root / "abl_b").write_bytes((FIXTURES / "rocknix.bin").read_bytes())
-        result = self.run_script("dualboot.sh", "linux", "usb", *self.inspections())
+        result = self.run_script("dualboot.sh", "linux", "usb", "rocknix", "rocknix")
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual("linux usb ok\n", result.stdout)
         expected = bytearray(devinfo())
@@ -236,25 +213,18 @@ class ShellTests(unittest.TestCase):
         for command in ("locations", "internal"):
             self.assertEqual(0, self.run_script("dualboot.sh", command).returncode)
 
-    def test_devinfo_mutations_refuse_missing_stale_and_malformed_inspections(self):
-        self.assertNotEqual(0, self.run_script("dualboot.sh", "linux", "usb").returncode)
-        args = self.inspections()
-        path = self.root / "abl_b"
-        original = path.read_bytes()
-        for changed in (bytes([original[0] ^ 1]) + original[1:], original + b"extra"):
-            path.write_bytes(changed)
-            result = self.run_script("dualboot.sh", "linux", "usb", *args)
-            self.assertNotEqual(0, result.returncode)
-            self.assertIn("changed since inspection", result.stderr)
-            self.assertEqual(devinfo(), (self.root / "devinfo").read_bytes())
-        path.write_bytes(original)
-        for index, value in ((0, "0"), (0, "1048577"), (0, "24;touch injected"),
-                             (1, "g" * 64), (1, args[1] + "\n"), (2, "rocknix;touch injected")):
-            invalid = args.copy()
-            invalid[index] = value
-            result = self.run_script("dualboot.sh", "linux", "usb", *invalid)
-            self.assertNotEqual(0, result.returncode)
-            self.assertEqual(devinfo(), (self.root / "devinfo").read_bytes())
+    def test_mutations_refuse_missing_invalid_and_disallowed_kind_tokens(self):
+        for kinds in ([], ["rocknix"], ["rocknix", "stock", "extra"], ["rocknix", "unknown"],
+                      ["rocknix", "rocknix;touch injected"], ["rocknix", "rocknix\n"], ["", "rocknix"]):
+            for script, args in (
+                ("dualboot.sh", ["linux", "usb", *kinds]),
+                ("abl.sh", ["flash", "absent.elf", "0" * 64, str(self.root / "backup"), *kinds]),
+            ):
+                with self.subTest(script=script, kinds=kinds):
+                    result = self.run_script(script, *args)
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertEqual(devinfo(), (self.root / "devinfo").read_bytes())
+                    self.assertFalse((self.root / "backup").exists())
 
     def test_kotlin_openabl_and_unknown_classifications_block_both_mutation_paths(self):
         for name in ("openabl-marker", "unknown"):
@@ -262,10 +232,11 @@ class ShellTests(unittest.TestCase):
                 path = self.root / f"abl_{slot}"
                 old = path.read_bytes()
                 path.write_bytes((FIXTURES / f"{name}.bin").read_bytes())
-                inspections = self.inspections()
+                kinds = ["rocknix", "rocknix"]
+                kinds[0 if slot == "a" else 1] = "openabl" if name == "openabl-marker" else "unknown"
                 for script, args in (
-                    ("dualboot.sh", ["linux", "usb", *inspections]),
-                    ("abl.sh", ["flash", "absent.elf", "0" * 64, str(self.root / "backup"), *inspections]),
+                    ("dualboot.sh", ["linux", "usb", *kinds]),
+                    ("abl.sh", ["flash", "absent.elf", "0" * 64, str(self.root / "backup"), *kinds]),
                 ):
                     result = self.run_script(script, *args)
                     self.assertNotEqual(0, result.returncode)
@@ -275,14 +246,14 @@ class ShellTests(unittest.TestCase):
                     self.assertFalse((self.root / "backup").exists())
                 path.write_bytes(old)
 
-    def test_flash_confirms_each_original_slot_just_before_its_write(self):
+    def test_flash_accepts_confirmed_rocknix_and_stock_and_preserves_stock_backup(self):
         # Simulate block-device predicates only; all I/O stays on regular fixture files.
         for slot, kind in (("a", "stock"), ("b", "rocknix")):
             image = bytearray((FIXTURES / f"{kind}.bin").read_bytes() + bytes(512))
             image[4] = 1
             (self.root / f"abl_{slot}").write_bytes(image)
         original_stock = (self.root / "abl_a").read_bytes()
-        inspections = self.inspections()
+        kinds = ["stock", "rocknix"]
         elf = FIXTURES / "rocknix.bin"
         digest = hashlib.sha256(elf.read_bytes()).hexdigest()
         (self.root / "blockdev").write_text('#!/bin/sh\n[ "$1" = --getsize64 ] || exit 1\nstat -c %s "$2"\n')
@@ -295,7 +266,7 @@ class ShellTests(unittest.TestCase):
 . "$0"
 '''
         result = subprocess.run(["bash", "-c", wrapper, str(self.root / "abl.sh"), "flash", str(elf), digest,
-                                 str(self.root / "backup"), *inspections],
+                                 str(self.root / "backup"), *kinds],
                                 env=self.env, capture_output=True, text=True, check=False)
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("abl_b flashed and verified", result.stdout)

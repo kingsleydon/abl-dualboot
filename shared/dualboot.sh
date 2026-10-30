@@ -2,7 +2,7 @@
 # Read or set the ROCKNIX ABL default boot target stored in devinfo.
 # Usage: dualboot.sh status | targets | android | linux [sd|internal|usb]
 # Internal app helpers: locations | internal (read-only, no devinfo dependency).
-# Mutations require a location (empty allowed), then per-slot length, SHA-256 and Kotlin kind.
+# Mutations require a location (empty allowed), then Kotlin's slot a/b kinds.
 #   targets prints one Linux location per line, "<location> <name>": internal and sd when present (name from the
 #   first partition's label, e.g. Armada, ROCKNIX), and usb, which cannot be detected before booting.
 #   linux without a location picks it like the ABL menu does (below); a location overrides that.
@@ -94,10 +94,13 @@ case "$1" in
   *) fail "usage: $0 status | targets | android | linux [sd|internal|usb]" ;;
 esac
 
-[ "$#" -eq 8 ] || fail "missing ABL inspection - nothing written"
+[ "$#" -eq 4 ] || fail "missing ABL kinds - nothing written"
+case "$3$4" in *[!a-z]*) fail "invalid ABL kinds - nothing written" ;; esac
+case "$3 $4" in *openabl*) fail "OpenABL is not supported yet - nothing written" ;; esac
+printf '%s %s\n' "$3" "$4" | LC_ALL=C grep -Eq '^rocknix rocknix$' || fail "invalid ABL kinds - nothing written"
+case "$ABL_STATUS" in *" a=rocknix b=rocknix") ;; *) fail "ROCKNIX ABL required - nothing written" ;; esac
 BEFORE=$(sha256sum "$P" | cut -d' ' -f1)
 cp "$P" "$TMP/devinfo-before-switch.img" || fail "cannot back up devinfo - nothing written"
-sh "$DIR/abl.sh" verify switch "$3" "$4" "$5" "$6" "$7" "$8" || exit 1
 if [ "$CUR" != "$MODE$SRC" ]; then
   putb $MODE "$P" 0xA92
   putb $SRC "$P" 0xAF0
