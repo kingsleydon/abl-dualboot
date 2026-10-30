@@ -76,8 +76,13 @@ def refuse_openabl():
         if (directory / "SettingsSchema-8c5f2b7e-3a41-4d6c-9e2f-5b7a1c0d4e93").exists():
             raise SwitchError(OPENABL_ERROR)
         loader = directory / "LoaderInfo-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f"
-        if loader.exists() and loader.read_bytes()[4:].decode("utf-16-le").startswith("OpenABL "):
-            raise SwitchError(OPENABL_ERROR)
+        if loader.exists():
+            try:
+                info = loader.read_bytes()[4:].decode("utf-16-le")
+            except UnicodeError:
+                info = ""
+            if info.startswith("OpenABL "):
+                raise SwitchError(OPENABL_ERROR)
         catalog = openabl_catalog()
         for slot in ("a", "b"):
             path = Path(BYNAME) / f"abl_{slot}"
@@ -85,7 +90,7 @@ def refuse_openabl():
                 with path.open("rb", buffering=0) as f:
                     if abl_kind(f.read(1048576), catalog) == "openabl":
                         raise SwitchError(OPENABL_ERROR)
-    except (OSError, UnicodeError) as e:
+    except OSError as e:
         raise SwitchError("cannot inspect bootloader - nothing written") from e
 
 

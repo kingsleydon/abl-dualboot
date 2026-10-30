@@ -109,6 +109,24 @@ class RefusalTests(unittest.TestCase):
                 dualboot.main()
             reboot.assert_not_called()
 
+    def test_malformed_loader_info_does_not_block_rocknix(self):
+        loader = self.efivars / "LoaderInfo-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f"
+        with patch.object(dualboot, "internal_linux", return_value=False):
+            for value in (b"\xff", b"\x00\xd8", "OpenABL 1.2".encode("utf-16-le") + b"\xff"):
+                with self.subTest(value=value):
+                    loader.write_bytes(bytes(4) + value)
+                    self.device.write_bytes(devinfo())
+                    self.assertEqual("android sd", dualboot.status())
+                    self.assertEqual("linux sd", dualboot.switch("linux"))
+                    expected = bytearray(devinfo())
+                    expected[dualboot.BOOT_MODE] = 0
+                    expected[dualboot.BOOT_SOURCE] = 3
+                    self.assertEqual(bytes(expected), self.device.read_bytes())
+                    self.device.write_bytes(devinfo())
+                    (self.root / "abl_b").write_bytes((FIXTURES / "openabl-marker.bin").read_bytes())
+                    self.assert_refused()
+                    (self.root / "abl_b").write_bytes((FIXTURES / "rocknix.bin").read_bytes())
+
     def test_decky_reports_error_without_rebooting(self):
         (self.root / "abl_a").write_bytes((FIXTURES / "openabl-marker.bin").read_bytes())
         with patch.dict(sys.modules, {"decky": Mock(DECKY_PLUGIN_DIR=str(ROOT / "linux"))}):
