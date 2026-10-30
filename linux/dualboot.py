@@ -12,15 +12,86 @@
 #   Android -> Linux: BootMode=0; if BootSourceMode is 0 and no Linux is installed after
 #                     userdata on internal storage, BootSourceMode=3 (SDcard)
 # Only these two bytes are written; anything else changing restores the original.
-import os, subprocess, sys
+import hashlib, lzma, os, re, subprocess, sys
+from pathlib import Path
 
 DEV = os.environ.get("DEVINFO", "/dev/disk/by-partlabel/devinfo")
 BOOT_MODE, BOOT_SOURCE = 0xA92, 0xAF0
 SOURCES = {0: "internal", 1: "auto", 2: "usb", 3: "sd"}
+BYNAME = "/dev/disk/by-partlabel"
+EFIVARS = "/sys/firmware/efi/efivars"
+OPENABL_ERROR = "OpenABL is not supported yet - nothing written"
 
 
 class SwitchError(Exception):
     pass
+
+
+def openabl_catalog():
+    path = Path(__file__).resolve().with_name("openabl-images.txt")
+    if not path.is_file():
+        path = path.parent.parent / "shared/openabl-images.txt"
+    try:
+        return [(int(size), digest) for line in path.read_text().splitlines()
+                if line and not line.startswith("#")
+                for _, _, digest, size in [line.split()]]
+    except (OSError, ValueError) as e:
+        raise SwitchError("cannot read OpenABL image catalog - nothing written") from e
+
+
+def openabl_marker(image):
+    """OpenABL-Android-Installer's marker approach: a bounded LZMA firmware volume.
+    Inspect at most 1 MiB of input, 64 KiB of headers and 4 MiB of output."""
+    image = image[:1048576]
+    for at in range(min(65536, len(image) - 12)):
+        if image[at:at + 2] != b"\x5d\x00":
+            continue
+        dictionary = int.from_bytes(image[at + 1:at + 5], "little")
+        if not dictionary or dictionary & (dictionary - 1):
+            continue
+        try:
+            decoder = lzma.LZMADecompressor(format=lzma.FORMAT_ALONE, memlimit=64 << 20)
+            data = decoder.decompress(image[at:], max_length=4 << 20)
+        except lzma.LZMAError:
+            continue
+        if re.search(rb"OpenABL\x00[0-9]+\.[0-9]+\x00", data):
+            return True
+    return False
+
+
+def abl_kind(image, catalog):
+    lengths = {size for size, _ in catalog if size <= len(image)}
+    hashes = {size: hashlib.sha256(image[:size]).hexdigest() for size in lengths}
+    if any(hashes.get(size) == digest for size, digest in catalog) or openabl_marker(image):
+        return "openabl"
+    if b"qtestsign" in image:
+        return "rocknix"
+    return "stock" if b"QUALCOMM" in image else "unknown"
+
+
+def refuse_openabl():
+    # Same runtime signals used by Armada's openabl-updater/abl-version.
+    directory = Path(EFIVARS)
+    try:
+        if (directory / "SettingsSchema-8c5f2b7e-3a41-4d6c-9e2f-5b7a1c0d4e93").exists():
+            raise SwitchError(OPENABL_ERROR)
+        loader = directory / "LoaderInfo-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f"
+        if loader.exists():
+            try:
+                info = loader.read_bytes()[4:].decode("utf-16-le")
+            except UnicodeError:
+                info = ""
+            if info.startswith("OpenABL "):
+                raise SwitchError(OPENABL_ERROR)
+        catalog = openabl_catalog()
+        for slot in ("a", "b"):
+            path = Path(BYNAME) / f"abl_{slot}"
+            if path.exists():
+                with path.open("rb", buffering=0) as f:
+                    if abl_kind(f.read(1048576), catalog) == "openabl":
+                        raise SwitchError(OPENABL_ERROR)
+    except OSError as e:
+        raise SwitchError("cannot inspect bootloader - nothing written") from e
 
 
 def _read(path):
@@ -108,6 +179,7 @@ def sd_card():
 
 def targets():
     """Linux locations to offer as (location, OS name): internal and sd when present, usb always."""
+    refuse_openabl()
     result = []
     part = internal_part()
     if part:
@@ -125,6 +197,7 @@ def _linux_source(d):
 
 def status():
     """Returns e.g. "android sd" (default boot, then where Linux boots from)."""
+    refuse_openabl()
     with open(DEV, "rb", buffering=0) as f:
         d = f.read(4096)
     check(d)
@@ -135,6 +208,7 @@ def status():
 
 def switch(target, location=""):
     """Sets the default boot target the way the ABL menu does. Returns e.g. "android internal"."""
+    refuse_openabl()
     overrides = {"sd": 3, "internal": 0, "usb": 2}
     if target not in ("android", "linux"):
         raise SwitchError("target must be android or linux")

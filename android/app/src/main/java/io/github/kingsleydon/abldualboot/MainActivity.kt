@@ -156,8 +156,9 @@ private fun App(onAddTile: () -> Unit) {
                             TargetCard(target, enabled = s.abl.installed && !busy) { dialog = Dialog.Restart(target) }
                         }
                         Text(
-                            "Your device normally starts ${if (s.defaultBoot == BootTarget.LINUX) "Linux" else "Android"}. " +
-                                "Hold VOL- at power-on for the boot menu.",
+                            if (s.abl.openabl) OpenAbl.ERROR else
+                                "Your device normally starts ${if (s.defaultBoot == BootTarget.LINUX) "Linux" else "Android"}. " +
+                                    "Hold VOL- at power-on for the boot menu.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 4.dp),
@@ -303,6 +304,8 @@ private fun BootloaderCard(abl: AblStatus, onInstall: (restore: Boolean) -> Unit
     ) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             val (title, body) = when {
+                abl.openabl -> "OpenABL installed" to OpenAbl.ERROR
+                abl.error != null -> "Cannot inspect bootloader" to abl.error
                 !abl.supported -> "Device not supported" to "There is no ROCKNIX bootloader for this chip."
                 abl.replacedByUpdate -> "Linux boot menu removed" to "A system update put back the stock bootloader. Restore it to switch to Linux again."
                 else -> "ROCKNIX bootloader needed" to "Install it to dual-boot Linux (${abl.soc})."
@@ -314,6 +317,7 @@ private fun BootloaderCard(abl: AblStatus, onInstall: (restore: Boolean) -> Unit
             }
             Text(body, color = MaterialTheme.colorScheme.onErrorContainer)
             when {
+                abl.openabl || abl.error != null -> {}
                 !abl.supported -> {}
                 abl.replacedByUpdate -> Button(onClick = { onInstall(true) }, Modifier.fillMaxWidth()) { Text("Restore") }
                 else -> OutlinedButton(onClick = { onInstall(false) }, Modifier.fillMaxWidth()) { Text("Install ROCKNIX bootloader…") }

@@ -83,6 +83,7 @@ jobs:
           P=pkg/abl-dualboot; mkdir -p $P/dist
           cp decky/dist/index.js $P/dist/
           cp decky/plugin.json decky/main.py decky/LICENSE linux/dualboot.py $P/
+          cp shared/openabl-images.txt $P/
           # Decky shows and compares the package.json version, so it must match the release tag
           jq --arg v "$VERSION_NAME" '.version = $v' decky/package.json > $P/package.json
           mkdir -p out && (cd pkg && zip -rX ../out/abl-dualboot-decky.zip abl-dualboot)
@@ -96,10 +97,13 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+      - name: Python and shell tests
+        run: python3 -m unittest discover -s tests -v
       - name: Linux scripts
         run: |
           mkdir -p out
           (cd linux && zip -X ../out/abl-dualboot-linux.zip dualboot.py reboot-to-android.desktop)
+          zip -jX out/abl-dualboot-linux.zip shared/openabl-images.txt
           cp linux/install.sh out/install-linux.sh
       - uses: actions/upload-artifact@v7
         with:

@@ -19,6 +19,9 @@ TMP=${DUALBOOT_TMP:-/data/local/tmp}
 hex() { dd if="$P" bs=1 skip=$(($1)) count=$2 2>/dev/null | xxd -p | tr -d '\n'; }
 putb() { printf "\\$(printf %03o $((0x$1)))" | dd of="$2" bs=1 seek=$(($3)) count=1 conv=notrunc,fsync 2>/dev/null; }
 fail() { echo "! $1" >&2; exit 1; }
+DIR=$(cd "$(dirname "$0")" && pwd)
+ABL_STATUS=$(sh "$DIR/abl.sh" status) || fail "cannot inspect bootloader - nothing written"
+case "$ABL_STATUS" in *a=openabl*|*b=openabl*) fail "OpenABL is not supported yet - nothing written" ;; esac
 
 # Linux installed internally = partitions after userdata on the same disk (how Armada/ROCKNIX install it).
 # Prints the first such partition's sysfs name.
