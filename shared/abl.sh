@@ -1,7 +1,7 @@
 #!/system/bin/sh
 # ROCKNIX ABL helper.
 # Usage: abl.sh status [<inspection dir>]
-#        abl.sh flash <abl.elf> <sha256> <backup dir>
+#        abl.sh flash <abl.elf> <sha256> <backup dir> <a kind> <b kind>
 # OpenABL release hashes are checked first: OpenABL also carries qtestsign.
 # A slot is "rocknix" when its ELF carries the qtestsign certificate every ROCKNIX ABL build is signed with,
 # "stock" when it carries Qualcomm's. Stock slots are backed up before the first flash and never overwritten.
@@ -27,13 +27,13 @@ soc() {
 }
 
 kind() {
-  if openabl "$BYNAME/abl_$1"; then echo openabl
-  elif dd if="$BYNAME/abl_$1" bs=1048576 count=1 2>/dev/null | grep -q qtestsign; then echo rocknix
-  elif dd if="$BYNAME/abl_$1" bs=1048576 count=1 2>/dev/null | grep -q QUALCOMM; then echo stock
+  if openabl "$1"; then echo openabl
+  elif dd if="$1" bs=1048576 count=1 2>/dev/null | grep -q qtestsign; then echo rocknix
+  elif dd if="$1" bs=1048576 count=1 2>/dev/null | grep -q QUALCOMM; then echo stock
   else echo unknown; fi
 }
 
-prefix_sha() { head -c "$2" "/dev/block/by-name/abl_$1" | sha256sum | cut -d' ' -f1; }
+prefix_sha() { head -c "$2" "$BYNAME/abl_$1" | sha256sum | cut -d' ' -f1; }
 
 case "$1" in
   status)
@@ -43,30 +43,42 @@ case "$1" in
         head -c 1048576 "$BYNAME/abl_$s" > "$2/abl_$s.img" || fail "cannot read abl_$s"
       done
     fi
-    echo "soc=$(soc) a=$(kind a) b=$(kind b)" ;;
+    echo "soc=$(soc) a=$(kind "$BYNAME/abl_a") b=$(kind "$BYNAME/abl_b")" ;;
   flash)
     ELF=$2; SHA=$3; BAK=$4
     for s in a b; do
-      [ "$(kind $s)" != openabl ] || fail "OpenABL is not supported yet - nothing written"
+      case "$(kind "$BYNAME/abl_$s")" in
+        openabl) fail "OpenABL is not supported yet - nothing written" ;;
+        rocknix|stock) ;;
+        *) fail "unknown ABL - nothing written" ;;
+      esac
+    done
+    [ "$#" -eq 6 ] || fail "missing ABL kinds - nothing written"
+    for kind in "$5" "$6"; do
+      case "$kind" in
+        rocknix|stock) ;;
+        openabl) fail "OpenABL is not supported yet - nothing written" ;;
+        *) fail "invalid ABL kinds - nothing written" ;;
+      esac
     done
     [ "$(soc)" != unknown ] || fail "unsupported SoC $(getprop ro.board.platform)"
-    [ -b /dev/block/by-name/abl_a ] && [ -b /dev/block/by-name/abl_b ] || fail "abl_a/abl_b partitions not found"
+    [ -b "$BYNAME/abl_a" ] && [ -b "$BYNAME/abl_b" ] || fail "abl_a/abl_b partitions not found"
     [ "$(sha256sum "$ELF" | cut -d' ' -f1)" = "$SHA" ] || fail "ABL file checksum mismatch"
     [ "$(head -c 4 "$ELF" | xxd -p)" = 7f454c46 ] || fail "ABL file is not an ELF"
     SIZE=$(stat -c %s "$ELF")
-    [ "$SIZE" -le "$(blockdev --getsize64 /dev/block/by-name/abl_a)" ] || fail "ABL file larger than partition"
+    [ "$SIZE" -le "$(blockdev --getsize64 "$BYNAME/abl_a")" ] || fail "ABL file larger than partition"
     mkdir -p "$BAK" || fail "cannot create backup folder"
     for s in a b; do
-      if [ "$(kind $s)" = stock ] && [ ! -f "$BAK/stock-abl_$s.img" ]; then
-        dd if=/dev/block/by-name/abl_$s of="$BAK/stock-abl_$s.img" 2>/dev/null || fail "backup of abl_$s failed - nothing written"
+      if [ "$(kind "$BYNAME/abl_$s")" = stock ] && [ ! -f "$BAK/stock-abl_$s.img" ]; then
+        dd if="$BYNAME/abl_$s" of="$BAK/stock-abl_$s.img" 2>/dev/null || fail "backup of abl_$s failed - nothing written"
         echo "- Backed up stock abl_$s to $BAK/stock-abl_$s.img"
       fi
     done
     for s in b a; do
       if [ "$(prefix_sha $s $SIZE)" = "$SHA" ]; then echo "- abl_$s already up to date"; continue; fi
-      dd if="$ELF" of=/dev/block/by-name/abl_$s bs=4096 conv=fsync 2>/dev/null
+      dd if="$ELF" of="$BYNAME/abl_$s" bs=4096 conv=fsync 2>/dev/null
       if [ "$(prefix_sha $s $SIZE)" = "$SHA" ]; then echo "- abl_$s flashed and verified"; continue; fi
-      [ -f "$BAK/stock-abl_$s.img" ] && dd if="$BAK/stock-abl_$s.img" of=/dev/block/by-name/abl_$s conv=fsync 2>/dev/null
+      [ -f "$BAK/stock-abl_$s.img" ] && dd if="$BAK/stock-abl_$s.img" of="$BYNAME/abl_$s" conv=fsync 2>/dev/null
       fail "abl_$s verification failed - slot restored from backup, do not reboot"
     done
     sync; echo "- Done" ;;

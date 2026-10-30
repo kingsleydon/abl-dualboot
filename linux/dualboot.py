@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Read or set the ROCKNIX ABL default boot target stored in devinfo, then reboot.
+# Read or set the ROCKNIX ABL (devinfo) or OpenABL (misc) default boot target, then reboot.
 # Usage: dualboot.py status | targets | android | linux [sd|internal|usb]   (add --no-reboot to skip the reboot)
 #   targets prints one Linux location per line, "<location> <name>": internal and sd when present (name from the
 #   first partition's label, e.g. Armada, ROCKNIX), and usb, which cannot be detected before booting.
@@ -12,14 +12,16 @@
 #   Android -> Linux: BootMode=0; if BootSourceMode is 0 and no Linux is installed after
 #                     userdata on internal storage, BootSourceMode=3 (SDcard)
 # Only these two bytes are written; anything else changing restores the original.
-import hashlib, lzma, os, re, subprocess, sys
+# OpenABL uses a validated, CRC-32 sealed store in misc's last 4096 bytes (see edit_store).
+import fcntl, hashlib, os, re, stat, struct, subprocess, sys, zlib
 from pathlib import Path
 
 DEV = os.environ.get("DEVINFO", "/dev/disk/by-partlabel/devinfo")
 BOOT_MODE, BOOT_SOURCE = 0xA92, 0xAF0
 SOURCES = {0: "internal", 1: "auto", 2: "usb", 3: "sd"}
-BYNAME = "/dev/disk/by-partlabel"
-EFIVARS = "/sys/firmware/efi/efivars"
+BYNAME = os.environ.get("ABL_BY_NAME", "/dev/disk/by-partlabel")
+MISC = os.environ.get("MISC", "/dev/disk/by-partlabel/misc")
+OPENABL_SOURCES = {0: "auto", 1: "internal", 2: "sd", 3: "usb"}
 OPENABL_ERROR = "OpenABL is not supported yet - nothing written"
 
 
@@ -40,8 +42,7 @@ def openabl_catalog():
 
 
 def openabl_marker(image):
-    """OpenABL-Android-Installer's marker approach: a bounded LZMA firmware volume.
-    Inspect at most 1 MiB of input, 64 KiB of headers and 4 MiB of output."""
+    """Bounded LZMA firmware marker, as used by OpenABL-Android-Installer."""
     image = image[:1048576]
     for at in range(min(65536, len(image) - 12)):
         if image[at:at + 2] != b"\x5d\x00":
@@ -49,6 +50,10 @@ def openabl_marker(image):
         dictionary = int.from_bytes(image[at + 1:at + 5], "little")
         if not dictionary or dictionary & (dictionary - 1):
             continue
+        try:
+            import lzma
+        except ImportError as e:
+            raise SwitchError("cannot inspect bootloader: Python lacks lzma - nothing written") from e
         try:
             decoder = lzma.LZMADecompressor(format=lzma.FORMAT_ALONE, memlimit=64 << 20)
             data = decoder.decompress(image[at:], max_length=4 << 20)
@@ -59,39 +64,168 @@ def openabl_marker(image):
     return False
 
 
-def abl_kind(image, catalog):
+def released_openabl(image, catalog):
     lengths = {size for size, _ in catalog if size <= len(image)}
     hashes = {size: hashlib.sha256(image[:size]).hexdigest() for size in lengths}
-    if any(hashes.get(size) == digest for size, digest in catalog) or openabl_marker(image):
-        return "openabl"
-    if b"qtestsign" in image:
-        return "rocknix"
-    return "stock" if b"QUALCOMM" in image else "unknown"
+    return any(hashes.get(size) == digest for size, digest in catalog)
 
 
-def refuse_openabl():
-    # Same runtime signals used by Armada's openabl-updater/abl-version.
-    directory = Path(EFIVARS)
+def uses_openabl():
     try:
-        if (directory / "SettingsSchema-8c5f2b7e-3a41-4d6c-9e2f-5b7a1c0d4e93").exists():
-            raise SwitchError(OPENABL_ERROR)
-        loader = directory / "LoaderInfo-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f"
-        if loader.exists():
-            try:
-                info = loader.read_bytes()[4:].decode("utf-16-le")
-            except UnicodeError:
-                info = ""
-            if info.startswith("OpenABL "):
-                raise SwitchError(OPENABL_ERROR)
         catalog = openabl_catalog()
+        markers = []
         for slot in ("a", "b"):
             path = Path(BYNAME) / f"abl_{slot}"
+            marker = False
             if path.exists():
                 with path.open("rb", buffering=0) as f:
-                    if abl_kind(f.read(1048576), catalog) == "openabl":
+                    image = f.read(1048576)
+                    if released_openabl(image, catalog):
                         raise SwitchError(OPENABL_ERROR)
+                    marker = openabl_marker(image)
+            markers.append(marker)
+        if all(markers):
+            return True
+        if any(markers):
+            raise SwitchError(OPENABL_ERROR)
+        return False
     except OSError as e:
         raise SwitchError("cannot inspect bootloader - nothing written") from e
+
+
+def store_records(store, sealed=True):
+    """SettingsStoreValid at OpenABL 71c0040; never format or repair a store."""
+    if (len(store) != 4096 or store[:8] != b"OABLVARS"
+            or struct.unpack_from("<HH", store, 8) != (1, 4096)
+            or (sealed and struct.unpack_from("<I", store, 12)[0] != zlib.crc32(store[16:]))
+            or store[16] > 96):
+        raise SwitchError(OPENABL_ERROR)
+    records, names, at = [], set(), 128
+    while at < 4096 and store[at]:
+        length = store[at]
+        data = at + 3 + length
+        if length > 64 or data > 4096:
+            raise SwitchError(OPENABL_ERROR)
+        end = data + struct.unpack_from("<H", store, data - 2)[0]
+        name = bytes(store[at + 1:at + 1 + length])
+        if end > 4096 or name in names:
+            raise SwitchError(OPENABL_ERROR)
+        names.add(name)
+        records.append((name, at, data, end))
+        at = end
+    return records
+
+
+def store_values(store):
+    values = {name: store[data:end] for name, _, data, end in store_records(store)}
+    # SettingsFromVars ignores wrong-length and out-of-range values.
+    def byte(name, maximum):
+        value = values.get(name, b"")
+        return value[0] if len(value) == 1 and value[0] <= maximum else 0
+    return byte(b"BootMode", 1), byte(b"BootSource", 3)
+
+
+def store_set(store, name, value):
+    records = store_records(store, sealed=False)
+    last = records[-1][3] if records else 128
+    old = next((r for r in records if r[0] == name), None)
+    if old and old[3] - old[2] == len(value):
+        store[old[2]:old[3]] = value
+        return
+    end = last - (old[3] - old[1] if old else 0)
+    record = bytes([len(name)]) + name + struct.pack("<H", len(value)) + value
+    if end + len(record) > 4096:
+        raise SwitchError("OpenABL settings store is full - nothing written")
+    if old:
+        store[old[1]:end] = store[old[3]:last]
+    store[end:] = bytes(4096 - end)
+    store[end:end + len(record)] = record
+
+
+def edit_store(before, target, location="", internal=False):
+    _, source = store_values(before)
+    if target == "android":
+        mode, source = 1, 1
+    elif target == "linux":
+        mode = 0
+        source = {"internal": 1, "sd": 2, "usb": 3}.get(location, 2 if source == 1 and not internal else source)
+    else:
+        raise SwitchError("target must be android or linux")
+    if location and location not in ("internal", "sd", "usb"):
+        raise SwitchError("location must be sd, internal or usb")
+    store = bytearray(before)
+    # Seal once, after both edits. Intermediate CRCs are not valid.
+    for name, value in ((b"BootMode", mode), (b"BootSource", source)):
+        store_set(store, name, bytes([value]))
+    values = {name: store[data:end] for name, _, data, end in store_records(store, sealed=False)}
+    model = values.get(b"DeviceModel", b"")
+    store[16:113] = bytes(97)
+    if len(model) <= 96:
+        store[16] = len(model)
+        store[17:17 + len(model)] = model
+    struct.pack_into("<I", store, 12, zlib.crc32(store[16:]))
+    store_records(store)
+    return bytes(store), source
+
+
+def read_store(f):
+    offset = f.seek(0, os.SEEK_END) - 4096
+    if offset < 0:
+        raise SwitchError(OPENABL_ERROR)
+    f.seek(offset)
+    store = f.read(4096)
+    store_records(store)
+    return offset, store
+
+
+def openabl_store():
+    if not uses_openabl():
+        return None
+    try:
+        with open(MISC, "rb", buffering=0) as f:
+            return read_store(f)[1]
+    except OSError as e:
+        raise SwitchError(OPENABL_ERROR) from e
+
+
+def flush_misc_cache(f):
+    # BLKFLSBUF invalidates block-device pages before readback.
+    if stat.S_ISBLK(os.fstat(f.fileno()).st_mode):
+        fcntl.ioctl(f.fileno(), 0x1261)
+
+
+def switch_openabl(target, location):
+    try:
+        with open(MISC, "r+b", buffering=0) as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            flush_misc_cache(f)
+            offset, before = read_store(f)
+            after, source = edit_store(before, target, location, internal_linux())
+            if read_store(f) != (offset, before):
+                raise SwitchError("misc changed since inspection - nothing written")
+            try:
+                f.seek(offset)
+                if f.write(after) != 4096:
+                    raise OSError("short write to misc")
+                os.fsync(f.fileno())
+                flush_misc_cache(f)
+                if read_store(f) != (offset, after):
+                    raise SwitchError("misc verification failed")
+            except (OSError, SwitchError) as e:
+                try:
+                    f.seek(offset)
+                    if f.write(before) != 4096:
+                        raise OSError("short restore to misc")
+                    os.fsync(f.fileno())
+                    flush_misc_cache(f)
+                    if read_store(f) != (offset, before):
+                        raise OSError("misc restore mismatch")
+                except (OSError, SwitchError) as restore:
+                    raise SwitchError("misc restore failed - do not reboot") from restore
+                raise SwitchError("verification failed - original misc store restored") from e
+    except OSError as e:
+        raise SwitchError("cannot access misc - nothing written") from e
+    return f"{target} {OPENABL_SOURCES[source]}"
 
 
 def _read(path):
@@ -179,7 +313,7 @@ def sd_card():
 
 def targets():
     """Linux locations to offer as (location, OS name): internal and sd when present, usb always."""
-    refuse_openabl()
+    openabl_store()
     result = []
     part = internal_part()
     if part:
@@ -197,7 +331,10 @@ def _linux_source(d):
 
 def status():
     """Returns e.g. "android sd" (default boot, then where Linux boots from)."""
-    refuse_openabl()
+    store = openabl_store()
+    if store is not None:
+        mode, source = store_values(store)
+        return f"{'android' if mode else 'linux'} {OPENABL_SOURCES[source]}"
     with open(DEV, "rb", buffering=0) as f:
         d = f.read(4096)
     check(d)
@@ -208,12 +345,14 @@ def status():
 
 def switch(target, location=""):
     """Sets the default boot target the way the ABL menu does. Returns e.g. "android internal"."""
-    refuse_openabl()
+    store = openabl_store()
     overrides = {"sd": 3, "internal": 0, "usb": 2}
     if target not in ("android", "linux"):
         raise SwitchError("target must be android or linux")
     if location and location not in overrides:
         raise SwitchError("location must be sd, internal or usb")
+    if store is not None:
+        return switch_openabl(target, location)
     with open(DEV, "r+b", buffering=0) as f:
         before = f.read(4096)
         check(before)

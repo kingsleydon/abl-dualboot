@@ -1,9 +1,8 @@
 # Changelog
 
 ## Unreleased
-- Detect OpenABL before ROCKNIX, including OpenABL releases and custom builds in the Android app and Linux helper.
-- Refuse switching, installation and OTA restoration when OpenABL is present, with an explicit unsupported message. OpenABL switching is not supported yet.
-- Cover detection and refusal with shared Android/Python fixtures and shell tests.
+- Detects OpenABL and never installs ROCKNIX over it.
+- Experimental: switching on OpenABL builds that keep settings in misc (after v1.2); released v1.0–v1.2 are not supported yet.
 
 ## v2.2.1
 - Internal cleanup, no behavior change: shared helpers, no deprecated APIs, no compiler warnings.

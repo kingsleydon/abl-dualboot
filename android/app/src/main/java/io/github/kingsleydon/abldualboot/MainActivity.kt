@@ -156,7 +156,7 @@ private fun App(onAddTile: () -> Unit) {
                             TargetCard(target, enabled = s.abl.installed && !busy) { dialog = Dialog.Restart(target) }
                         }
                         Text(
-                            if (s.abl.openabl) OpenAbl.ERROR else
+                            if (s.abl.openabl && !s.abl.miscSupported) OpenAbl.ERROR else
                                 "Your device normally starts ${if (s.defaultBoot == BootTarget.LINUX) "Linux" else "Android"}. " +
                                     "Hold VOL- at power-on for the boot menu.",
                             style = MaterialTheme.typography.bodySmall,
@@ -182,7 +182,7 @@ private fun App(onAddTile: () -> Unit) {
                                 Icon(Icons.Filled.CheckCircle, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                                 Spacer(Modifier.size(8.dp))
                                 Text(
-                                    "ROCKNIX bootloader installed · ${s.abl.soc}",
+                                    "${if (s.abl.openabl) "OpenABL" else "ROCKNIX"} bootloader installed · ${s.abl.soc}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
