@@ -2,7 +2,7 @@
 # Flash ROCKNIX ABL (SM8550) to both abl slots on an AYN Odin 2 Portal over adb (needs KernelSU/root).
 # Re-run after every LineageOS update - LineageOS OTAs restore the stock ABL.
 # Back up first: adb exec-out "su -c 'cat /dev/block/by-name/abl_a'" > abl_a.img (same for abl_b).
-set -e
+set -eo pipefail
 cd "$(dirname "$0")"
 ELF=rocknix-abl-v1.2/abl_signed-SM8550.elf
 if [ ! -f "$ELF" ]; then
@@ -19,6 +19,7 @@ adb shell "su -c id" | grep -q 'uid=0' || { echo "No root (grant shell in Kernel
 
 # OpenABL uses qtestsign too; inspect release prefixes before staging or flashing anything.
 CATALOG=../shared/openabl-images.txt
+[ -r "$CATALOG" ] || { echo "OpenABL image catalog not found - nothing written"; exit 1; }
 for s in a b; do
   for n in $(sed '/^#/d' "$CATALOG" | cut -d' ' -f4 | sort -u); do
     hash=$(adb exec-out "su -c 'head -c $n /dev/block/by-name/abl_$s'" | shasum -a 256 | awk '{print $1}')
