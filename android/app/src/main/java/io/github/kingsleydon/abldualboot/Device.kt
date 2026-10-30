@@ -15,11 +15,11 @@ data class Target(val location: String, val name: String) {
     val title get() = if (location == "usb") "Linux on USB" else name
 }
 
-data class AblStatus(val soc: String, val slotA: AblKind, val slotB: AblKind, val error: String? = null) {
+data class AblStatus(val soc: String, val slotA: AblKind, val slotB: AblKind, val error: String? = null, val miscSupported: Boolean = false) {
     val openabl get() = slotA == AblKind.OPENABL || slotB == AblKind.OPENABL
-    val blockingError get() = if (openabl) OpenAbl.ERROR else error
+    val blockingError get() = if (openabl && !miscSupported) OpenAbl.ERROR else error
     val supported get() = soc != "unknown"
-    val installed get() = slotA == AblKind.ROCKNIX && slotB == AblKind.ROCKNIX
+    val installed get() = (openabl && miscSupported) || (slotA == AblKind.ROCKNIX && slotB == AblKind.ROCKNIX)
     /** One slot still has ROCKNIX but the other does not: a system update replaced it. */
     val replacedByUpdate get() = !openabl && !installed && (slotA == AblKind.ROCKNIX || slotB == AblKind.ROCKNIX)
 }
@@ -34,10 +34,46 @@ sealed interface DeviceState {
 object Device {
     const val BACKUP_DIR = "/sdcard/ABLDualBoot/backup"
 
-    private fun dualboot(context: Context, args: String): Root.Result {
+    @Synchronized private fun dualboot(context: Context, args: String): Root.Result {
         val abl = ablStatus(context)
         abl.blockingError?.let { return Root.Result(false, it) }
+        if (abl.openabl) return misc(context, args)
         return Root.run("DUALBOOT_TMP='${context.cacheDir}' sh '${Root.asset(context, "dualboot.sh")}' $args")
+    }
+
+    /** Kotlin owns parsing/CRC; root only copies bounded bytes, syncs, compares and rolls back. */
+    private fun misc(context: Context, args: String): Root.Result {
+        val directory = File(context.cacheDir, "misc-inspection-${UUID.randomUUID()}")
+        try {
+            check(directory.mkdir()) { "Cannot create misc inspection directory" }
+            val before = File(directory, "before.bin").apply { writeBytes(byteArrayOf()) }
+            val script = Root.asset(context, "misc.sh")
+            val read = Root.run("sh '$script' read '${directory.absolutePath}'")
+            if (!read.ok) return Root.Result(false, OpenAbl.ERROR)
+            val store = before.readBytes()
+            if (!OpenAblStore.valid(store)) return Root.Result(false, OpenAbl.ERROR)
+            if (args == "status") return Root.Result(true, OpenAblStore.status(store))
+            val locations = Root.asset(context, "dualboot.sh")
+            if (args == "targets") return Root.run("sh '$locations' locations")
+            val fields = read.output.split(' ')
+            check(fields.size == 2 && fields[0].toLongOrNull()?.let { it >= 0 } == true &&
+                fields[1].matches(Regex("[a-f0-9]{64}"))) { "Invalid misc snapshot" }
+            val internal = Root.run("sh '$locations' internal")
+            if (!internal.ok || internal.output !in listOf("0", "1")) return Root.Result(false, "Cannot inspect internal storage - nothing written")
+            val command = args.split(' ', limit = 2)
+            val next = OpenAblStore.edit(store, command[0], command.getOrElse(1) { "" }, internal.output == "1")
+            File(directory, "next.bin").writeBytes(next)
+            val result = Root.run("sh '$script' write '${directory.absolutePath}' ${fields[0]} ${fields[1]} ${sha256(next)}")
+            if (!result.ok) return result
+            return Root.Result(true, OpenAblStore.status(next) + " ok")
+        } catch (e: IllegalArgumentException) {
+            return Root.Result(false, e.message ?: OpenAbl.ERROR)
+        } catch (_: Exception) {
+            return Root.Result(false, "Cannot access OpenABL settings")
+        } finally {
+            directory.listFiles()?.forEach { it.delete() }
+            directory.delete()
+        }
     }
 
     suspend fun load(context: Context): DeviceState = withContext(Dispatchers.IO) {
@@ -61,7 +97,7 @@ object Device {
         }
     }
 
-    fun ablStatus(context: Context): AblStatus {
+    @Synchronized fun ablStatus(context: Context): AblStatus {
         val directory = File(context.cacheDir, "abl-inspection-${UUID.randomUUID()}")
         val files = listOf("a", "b").map { File(directory, "abl_$it.img") }
         try {
@@ -71,7 +107,10 @@ object Device {
             val result = Root.run("sh '${Root.asset(context, "abl.sh")}' status '${directory.absolutePath}'")
             if (!result.ok) return AblStatus("unknown", AblKind.UNKNOWN, AblKind.UNKNOWN, result.error)
             val fields = result.output.split(" ").mapNotNull { it.split("=").takeIf { kv -> kv.size == 2 }?.let { kv -> kv[0] to kv[1] } }.toMap()
-            return AblStatus(fields["soc"] ?: "unknown", OpenAbl.kind(files[0].readBytes(), catalog), OpenAbl.kind(files[1].readBytes(), catalog))
+            val images = files.map { it.readBytes() }
+            val kinds = images.map { OpenAbl.kind(it, catalog) }
+            val supported = AblKind.OPENABL in kinds && images.none { OpenAbl.released(it, catalog) } && misc(context, "status").ok
+            return AblStatus(fields["soc"] ?: "unknown", kinds[0], kinds[1], miscSupported = supported)
         } catch (e: Exception) {
             return AblStatus("unknown", AblKind.UNKNOWN, AblKind.UNKNOWN, "Cannot inspect bootloader - nothing written")
         } finally {
@@ -95,6 +134,7 @@ object Device {
      */
     suspend fun installAbl(context: Context, soc: String): Root.Result = withContext(Dispatchers.IO) {
         val abl = ablStatus(context)
+        if (abl.openabl) return@withContext Root.Result(false, OpenAbl.ERROR)
         abl.blockingError?.let { return@withContext Root.Result(false, it) }
         val elf = try {
             AblRelease.extract(AblRelease.download(), soc)
@@ -103,7 +143,9 @@ object Device {
         }
         val file = File(context.filesDir, "abl_signed-$soc.elf").apply { writeBytes(elf) }
         try {
-            ablStatus(context).blockingError?.let { return@withContext Root.Result(false, it) }
+            val current = ablStatus(context)
+            if (current.openabl) return@withContext Root.Result(false, OpenAbl.ERROR)
+            current.blockingError?.let { return@withContext Root.Result(false, it) }
             Root.run("sh '${Root.asset(context, "abl.sh")}' flash '${file.absolutePath}' ${sha256(elf)} $BACKUP_DIR")
         } finally {
             file.delete()

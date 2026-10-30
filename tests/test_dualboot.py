@@ -55,7 +55,7 @@ class DetectionTests(unittest.TestCase):
             self.assertEqual(9, len({chip for v, chip, _, _ in rows if v == version}))
 
 
-class RefusalTests(unittest.TestCase):
+class DeviceTestCase(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="abl-dualboot-test-")
         self.addCleanup(self.temp.cleanup)
@@ -66,7 +66,8 @@ class RefusalTests(unittest.TestCase):
             (self.root / f"abl_{slot}").write_bytes((FIXTURES / "rocknix.bin").read_bytes())
         self.efivars = self.root / "efivars"
         self.efivars.mkdir()
-        for name, value in (("DEV", str(self.device)), ("BYNAME", str(self.root)), ("EFIVARS", str(self.efivars))):
+        for name, value in (("DEV", str(self.device)), ("BYNAME", str(self.root)), ("EFIVARS", str(self.efivars)),
+                            ("MISC", str(self.root / "misc"))):
             p = patch.object(dualboot, name, value)
             p.start()
             self.addCleanup(p.stop)
@@ -81,6 +82,8 @@ class RefusalTests(unittest.TestCase):
                 action()
         self.assertEqual(devinfo(), self.device.read_bytes())
 
+
+class RefusalTests(DeviceTestCase):
     def test_refuses_hash_or_marker_in_either_slot_before_touching_devinfo(self):
         for name in ("openabl-hash", "openabl-marker"):
             for slot in ("a", "b"):
@@ -208,6 +211,14 @@ class ShellTests(unittest.TestCase):
         self.assertEqual(bytes(expected), (self.root / "devinfo").read_bytes())
         (self.root / "abl_b").write_bytes((FIXTURES / "unknown.bin").read_bytes())
         self.assertIn("b=unknown", self.run_script("abl.sh", "status").stdout)
+
+    def test_app_location_helpers_work_without_devinfo_but_legacy_targets_still_validate_it(self):
+        (self.root / "devinfo").unlink()
+        for command in ("locations", "internal"):
+            result = self.run_script("dualboot.sh", command)
+            self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("usb Linux", self.run_script("dualboot.sh", "locations").stdout)
+        self.assertNotEqual(0, self.run_script("dualboot.sh", "targets").returncode)
 
 
 if __name__ == "__main__":

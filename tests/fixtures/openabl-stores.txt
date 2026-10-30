@@ -1,0 +1,64 @@
+# OpenABL 71c0040 / 7803c64 Core/SettingsStore.c and Core/Settings.c
+# frame NAME OFFSET LENGTH; edit BEFORE TARGET LOCATION(-=none) INTERNAL AFTER MODE SOURCE
+frame android-internal 0 4096
+frame linux-sd 4096 4096
+frame linux-internal 8192 4096
+frame linux-usb 12288 4096
+frame android-usb 16384 4096
+frame linux-auto 20480 4096
+frame missing 24576 4096
+frame inserted 28672 4096
+frame wrong-length 32768 4096
+frame resized 36864 4096
+frame bad-values 40960 4096
+frame stale-model 45056 4096
+frame long-model 49152 4096
+frame long-model-edited 53248 4096
+frame full 57344 4096
+frame blank 61440 4096
+frame erased 65536 4096
+frame foreign 69632 4096
+frame bad-crc 73728 4096
+frame version-2 77824 4096
+frame bad-size 81920 4096
+frame duplicates 86016 4096
+frame long-name 90112 4096
+frame out-of-bounds 94208 4096
+frame bad-model-length 98304 4096
+frame empty 102400 4096
+frame empty-edited 106496 4096
+frame short 110592 100
+invalid blank
+invalid erased
+invalid foreign
+invalid bad-crc
+invalid version-2
+invalid bad-size
+invalid duplicates
+invalid long-name
+invalid out-of-bounds
+invalid bad-model-length
+invalid short
+full full
+edit android-internal linux - false linux-sd linux sd
+edit android-internal linux - true linux-internal linux internal
+edit linux-sd android - false android-internal android internal
+edit android-usb linux - false linux-usb linux usb
+edit linux-auto linux - false linux-auto linux auto
+edit android-internal linux internal false linux-internal linux internal
+edit android-internal linux sd false linux-sd linux sd
+edit android-internal linux usb false linux-usb linux usb
+edit missing android - false inserted android internal
+edit wrong-length android - false resized android internal
+edit bad-values linux - false linux-auto linux auto
+edit stale-model linux - false linux-sd linux sd
+edit long-model android - false long-model-edited android internal
+edit empty linux - false empty-edited linux auto
+status missing linux auto
+status wrong-length linux auto
+status bad-values linux auto
+status full linux auto
+status android-internal android internal
+status linux-sd linux sd
+status linux-usb linux usb
+status linux-auto linux auto

@@ -1,6 +1,7 @@
 #!/system/bin/sh
 # Read or set the ROCKNIX ABL default boot target stored in devinfo.
 # Usage: dualboot.sh status | targets | android | linux [sd|internal|usb]
+# Internal app helpers: locations | internal (read-only, no devinfo dependency).
 #   targets prints one Linux location per line, "<location> <name>": internal and sd when present (name from the
 #   first partition's label, e.g. Armada, ROCKNIX), and usb, which cannot be detected before booting.
 #   linux without a location picks it like the ABL menu does (below); a location overrides that.
@@ -54,6 +55,17 @@ os_name() {
   esac
 }
 source_name() { case "$1" in 00) echo internal ;; 01) echo auto ;; 02) echo usb ;; 03) echo sd ;; *) echo "unknown" ;; esac; }
+print_targets() {
+  part=$(internal_part) && echo "internal $(os_name "$part")"
+  sd=$(sd_card) && echo "sd $(os_name "${sd}p1")"
+  echo "usb Linux"
+}
+
+# Read-only location discovery also serves the app's OpenABL path (no devinfo dependency).
+case "$1" in
+  internal) internal_linux && echo 1 || echo 0; exit 0 ;;
+  locations) print_targets; exit 0 ;;
+esac
 
 [ "$(hex 0x0 13)" = 414e44524f49442d424f4f5421 ] || fail "devinfo layout not recognised - nothing written"
 [ "$(hex 0xA54 14)" = 010008000100426f6f744d6f6465 ] || fail "BootMode key not found - nothing written"
@@ -68,11 +80,7 @@ case "$1" in
   status)
     [ "$MODE_CUR" = 01 ] && echo "android $(source_name $LINUX_SRC)" || echo "linux $(source_name $SRC_CUR)"
     exit 0 ;;
-  targets)
-    part=$(internal_part) && echo "internal $(os_name "$part")"
-    sd=$(sd_card) && echo "sd $(os_name "${sd}p1")"
-    echo "usb Linux"
-    exit 0 ;;
+  targets) print_targets; exit 0 ;;
   android) MODE=01; SRC=00 ;;
   linux)
     MODE=00

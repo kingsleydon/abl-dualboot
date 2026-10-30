@@ -2,7 +2,9 @@
 
 ## Unreleased
 - Detect OpenABL before ROCKNIX, including OpenABL releases and custom builds in the Android app and Linux helper.
-- Refuse switching, installation and OTA restoration when OpenABL is present, with an explicit unsupported message. OpenABL switching is not supported yet.
+- Add experimental switching for OpenABL builds after v1.2 that use the version 1 settings store in `misc` (main since 71c0040). Not device-verified.
+- Refuse switching for released OpenABL v1.0–v1.2 or an absent/invalid store; never create or repair a store. Installation and OTA restoration remain blocked for all OpenABL builds.
+- Preserve unrelated settings, reseal the model copy and CRC-32, and verify bounded writes with rollback. Share golden settings fixtures across Android and Python, including invalid stores and I/O failures.
 - Cover detection and refusal with shared Android/Python fixtures and shell tests.
 
 ## v2.2.1

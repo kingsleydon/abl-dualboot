@@ -22,10 +22,14 @@ object OpenAbl {
             Image(fields[3].toInt(), fields[2])
         }.toList().also { require(it.isNotEmpty()) { "Empty OpenABL image catalog" } }
 
-    fun kind(image: ByteArray, catalog: List<Image>): AblKind {
+    fun released(image: ByteArray, catalog: List<Image>): Boolean {
         val hashes = catalog.map { it.size }.distinct().filter { it <= image.size }
             .associateWith { sha256(image.copyOfRange(0, it)) }
-        if (catalog.any { hashes[it.size] == it.sha } || hasMarker(image)) return AblKind.OPENABL
+        return catalog.any { hashes[it.size] == it.sha }
+    }
+
+    fun kind(image: ByteArray, catalog: List<Image>): AblKind {
+        if (released(image, catalog) || hasMarker(image)) return AblKind.OPENABL
         val text = image.toString(Charsets.ISO_8859_1)
         return when {
             "qtestsign" in text -> AblKind.ROCKNIX

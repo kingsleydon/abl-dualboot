@@ -8,14 +8,14 @@ BASE=https://github.com/$REPO/releases/latest/download
 
 [ "$(id -u)" = 0 ] || { echo "Run with sudo (or as root)."; exit 1; }
 command -v python3 >/dev/null || { echo "python3 is required."; exit 1; }
-[ -e /dev/disk/by-partlabel/devinfo ] || { echo "No devinfo partition found - is this a ROCKNIX ABL device?"; exit 1; }
+[ -e /dev/disk/by-partlabel/devinfo ] || [ -e /dev/disk/by-partlabel/misc ] || { echo "No devinfo or misc partition found - is this an ABL device?"; exit 1; }
 
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 echo "- Downloading latest release"
 curl -fsSL "$BASE/abl-dualboot-linux.zip" -o "$TMP/linux.zip"
 python3 -m zipfile -e "$TMP/linux.zip" "$TMP/linux"
 
-echo "- Checking devinfo (read-only)"
+echo "- Checking boot settings (read-only)"
 python3 "$TMP/linux/dualboot.py" status
 
 DIR=/etc/abl-dualboot
