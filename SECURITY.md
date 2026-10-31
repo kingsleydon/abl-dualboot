@@ -1,6 +1,6 @@
 # Security policy
 
-ABL Dual Boot runs as root and writes to the `devinfo` and `abl` partitions, so problems can affect whether a device boots.
+ABL Dual Boot runs as root and writes to the `devinfo`, `misc` (OpenABL settings) and `abl` partitions, so problems can affect whether a device boots.
 
 Please report vulnerabilities privately through
 [GitHub's private reporting](https://github.com/kingsleydon/abl-dualboot/security/advisories/new),

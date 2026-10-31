@@ -3,3 +3,6 @@ contact_links:
   - name: ROCKNIX ABL / bootloader menu problems
     url: https://github.com/ROCKNIX/abl
     about: Issues with the ROCKNIX ABL itself belong to the ROCKNIX project.
+  - name: OpenABL / bootloader menu problems
+    url: https://github.com/OpenHandheldCollective/OpenABL
+    about: Issues with OpenABL itself belong to the OpenABL project.

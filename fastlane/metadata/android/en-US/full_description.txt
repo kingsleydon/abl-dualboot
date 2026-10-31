@@ -1,14 +1,14 @@
-<p>Switch between Android and Linux on handhelds that use the <a href="https://github.com/ROCKNIX/abl">ROCKNIX ABL</a> bootloader without holding VOL- at power-on.</p>
+<p>Switch between Android and Linux on handhelds that use the <a href="https://github.com/ROCKNIX/abl">ROCKNIX ABL</a> bootloader without holding VOL- at power-on. Newer <a href="https://github.com/OpenHandheldCollective/OpenABL">OpenABL</a> builds are supported experimentally.</p>
 
 <p>ABL Dual Boot finds every Linux system the bootloader can start (internal storage, SD card, USB) and shows it by name, such as Armada, ROCKNIX or Batocera. Tap one, confirm, and your device restarts into it.</p>
 
 <ul>
 <li>Quick Settings tile with the system you used last</li>
-<li>Installs the ROCKNIX ABL, or restores it after an Android system update removed it (stock bootloader is backed up first)</li>
+<li>Installs the ROCKNIX ABL, or restores it after an Android system update removed it (stock bootloader is backed up first); never installs over OpenABL</li>
 <li>Works with Magisk, KernelSU, KernelSU Next, SukiSU and APatch</li>
 <li>Companion Decky plugin and script to switch back from Linux</li>
 </ul>
 
-<p><b>Requires root.</b> It writes the same two bytes in the devinfo partition that the ROCKNIX boot menu writes, verifies them, and restores the original on any mismatch. Tested on an AYN Odin 2 Portal (SM8550). The VOL- boot menu always remains as a fallback.</p>
+<p><b>Requires root.</b> On the ROCKNIX ABL it writes the same two bytes in the devinfo partition that the ROCKNIX boot menu writes; on OpenABL builds after v1.2 it changes the boot settings in the misc partition the way the OpenABL menu does. Every write is verified and the original is restored on any mismatch. Released OpenABL v1.0–v1.2 is detected but not supported yet. Tested on an AYN Odin 2 Portal (SM8550). The VOL- boot menu always remains as a fallback.</p>
 
 <p>The ROCKNIX ABL is not included in the app. When you choose Install or Restore, it downloads the official release from github.com/ROCKNIX/abl and checks it against a pinned checksum before flashing.</p>

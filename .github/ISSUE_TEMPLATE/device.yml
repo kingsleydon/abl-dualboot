@@ -19,8 +19,8 @@ body:
   - type: input
     id: abl
     attributes:
-      label: "ROCKNIX ABL version"
-      placeholder: "1.2"
+      label: "Bootloader and version"
+      placeholder: "ROCKNIX ABL 1.2, or OpenABL (build)"
   - type: checkboxes
     id: works
     attributes:
