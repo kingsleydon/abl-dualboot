@@ -4,7 +4,7 @@ labels: [bug]
 body:
   - type: markdown
     attributes:
-      value: "If your device doesn't boot, hold **VOL-** at power-on to reach the ROCKNIX boot menu and switch back manually."
+      value: "If your device doesn't boot, hold **VOL-** at power-on to reach the boot menu (ROCKNIX ABL or OpenABL) and switch back manually."
   - type: input
     id: device
     attributes:

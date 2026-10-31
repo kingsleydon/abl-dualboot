@@ -1,7 +1,7 @@
 {
   "name": "abl-dualboot",
   "version": "2.0.0",
-  "description": "Reboot to Android on handhelds that use the ROCKNIX ABL",
+  "description": "Reboot to Android on handhelds that use the ROCKNIX ABL or OpenABL",
   "type": "module",
   "scripts": {
     "build": "rollup -c",
