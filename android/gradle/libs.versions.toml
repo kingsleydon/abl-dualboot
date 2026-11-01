@@ -1,13 +1,13 @@
 [versions]
 junit = "4.13.2"
-agp = "9.4.1"
-kotlin = "2.4.20"
+agp = "9.5.0"
+kotlin = "2.4.21"
 composeBom = "2026.09.00"
 activityCompose = "1.12.4"
 coroutines = "1.11.0"
 libsu = "6.0.0"
 work = "2.12.0"
-xz = "1.10"
+xz = "1.12"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
