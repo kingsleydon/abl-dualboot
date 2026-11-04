@@ -15,7 +15,7 @@ object OpenAbl {
     data class Image(val size: Int, val sha: String)
     data class Inspection(val kind: AblKind, val miscCapable: Boolean)
 
-    fun canUseMisc(slots: List<Inspection>) = slots.size == 2 && slots.all { it.miscCapable }
+    fun canUseMisc(slots: List<Inspection>) = slots.size == 2 && slots.all { it.kind == AblKind.OPENABL && it.miscCapable }
 
     fun catalog(text: String): List<Image> = text.lineSequence()
         .filter { it.isNotBlank() && !it.startsWith("#") }
@@ -33,7 +33,7 @@ object OpenAbl {
 
     fun inspect(image: ByteArray, catalog: List<Image>): Inspection {
         val released = released(image, catalog)
-        val marker = !released && hasMarker(image)
+        val (marker, misc) = markers(image)
         val text = image.toString(Charsets.ISO_8859_1)
         val kind = when {
             released || marker -> AblKind.OPENABL
@@ -41,10 +41,12 @@ object OpenAbl {
             "QUALCOMM" in text -> AblKind.STOCK
             else -> AblKind.UNKNOWN
         }
-        return Inspection(kind, marker)
+        return Inspection(kind, kind == AblKind.OPENABL && misc)
     }
 
-    fun hasMarker(image: ByteArray): Boolean {
+    private fun markers(image: ByteArray): Pair<Boolean, Boolean> {
+        var openabl = false
+        var misc = false
         val size = minOf(image.size, MAX_IMAGE)
         for (at in 0 until minOf(65536, size - 12)) {
             if (image[at] != 0x5d.toByte() || image[at + 1] != 0.toByte()) continue
@@ -60,11 +62,14 @@ object OpenAbl {
                         output.write(buffer, 0, count)
                     }
                 }
-                if (marker.containsMatchIn(output.toString(Charsets.ISO_8859_1.name()))) return true
+                val text = output.toString(Charsets.ISO_8859_1.name())
+                openabl = openabl || marker.containsMatchIn(text)
+                misc = misc || "OABLVARS" in text
+                if (openabl && misc) break
             } catch (_: IOException) {
                 // A plausible LZMA header can also occur in an unrelated image.
             }
         }
-        return false
+        return openabl to misc
     }
 }

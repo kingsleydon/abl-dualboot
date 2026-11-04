@@ -10,11 +10,10 @@ Works with any Linux that boots through the ROCKNIX ABL (Armada, ROCKNIX, Batoce
 from an **SD card or internal storage**, and with every common root solution: **Magisk, KernelSU,
 KernelSU Next, SukiSU, APatch**.
 
-**OpenABL switching is experimental and not device-tested.** It supports builds after v1.2 that keep
-settings in `misc` ([upstream change](https://github.com/OpenHandheldCollective/OpenABL/commit/71c0040));
-released v1.0–v1.2 are not supported. Both slots must have an OpenABL marker, neither may match a released
-image, and the existing settings store must be valid version 1. Mixed or unidentified slots refuse switching.
-The app never installs ROCKNIX over OpenABL.
+**OpenABL switching is experimental and not device-tested.** Both slots must be identified as OpenABL
+by a release hash or compressed marker, and each slot's decompressed firmware must contain `OABLVARS`,
+the marker for settings in `misc`. The existing store must be valid version 1. Released v1.0–v1.2 lack
+this capability; mixed or unidentified slots refuse switching. The app never installs ROCKNIX over OpenABL.
 
 <a href="../../releases/latest/download/ABL-Dual-Boot.apk"><img alt="Download APK" src="https://img.shields.io/github/v/release/kingsleydon/abl-dualboot?label=Download%20APK&logo=android" height="28"></a>
 
@@ -101,10 +100,12 @@ ABL Dual Boot does exactly what the menu's **Switch boot mode** does:
 - **Android → Linux:** `BootMode=0`. If `BootSourceMode` is `0` and no Linux is installed internally, `BootSourceMode=3` (SD card).
   "Installed internally" means partitions follow `userdata` on the same disk, which is how Armada/ROCKNIX install to internal storage.
 
-For OpenABL, switching follows its [settings rules](https://github.com/OpenHandheldCollective/OpenABL/blob/71c0040/Core/Settings.c)
-and [store format](https://github.com/OpenHandheldCollective/OpenABL/blob/71c0040/Core/SettingsStore.h).
-Only the last 4 KiB of `misc` is written; other settings are preserved, the model copy and CRC are refreshed,
-and the store is never created or repaired. Writes are backed up, synced, read back after block-cache
+For OpenABL, switching follows its [settings rules](https://github.com/OpenHandheldCollective/OpenABL/blob/2494196/Core/Settings.c)
+and [store format](https://github.com/OpenHandheldCollective/OpenABL/blob/2494196/Core/SettingsStore.h).
+Only the last 4 KiB of `misc` is written. Switching to Android keeps the Linux boot source; switching to
+Linux falls back from internal storage to SD when no Linux is installed internally. Default values are
+removed from the store, other settings (including `DeviceModel`) are preserved, and the CRC is refreshed.
+The store is never created or repaired. Writes are backed up, synced, read back after block-cache
 invalidation, and restored on failure. Cache invalidation must succeed before writing.
 
 ABL Dual Boot lists each place that has Linux (one per location, which is what the ABL supports):

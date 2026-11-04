@@ -14,6 +14,8 @@ class OpenAblTest {
         for ((name, expected) in listOf(
             "openabl-hash.bin" to AblKind.OPENABL,
             "openabl-marker.bin" to AblKind.OPENABL,
+            "openabl-misc.bin" to AblKind.OPENABL,
+            "misc-only.bin" to AblKind.ROCKNIX,
             "rocknix.bin" to AblKind.ROCKNIX,
             "stock.bin" to AblKind.STOCK,
             "unknown.bin" to AblKind.UNKNOWN,
@@ -29,14 +31,17 @@ class OpenAblTest {
     }
 
     @Test fun boundsMarkerDecompressionAndInput() {
-        assertFalse(OpenAbl.hasMarker(fixture("oversized-marker.bin")))
-        assertFalse(OpenAbl.hasMarker(ByteArray(1048576) + fixture("openabl-marker.bin")))
+        assertEquals(AblKind.UNKNOWN, OpenAbl.inspect(fixture("oversized-marker.bin"), catalog).kind)
+        assertFalse(OpenAbl.inspect(ByteArray(1048576) + fixture("openabl-misc.bin"), catalog).miscCapable)
     }
 
-    @Test fun miscRequiresTwoPositivelyIdentifiedUnreleasedOpenAblSlots() {
-        val custom = OpenAbl.inspect(fixture("openabl-marker.bin"), catalog)
+    @Test fun miscRequiresTwoPositivelyIdentifiedCapableOpenAblSlots() {
+        val custom = OpenAbl.inspect(fixture("openabl-misc.bin"), catalog)
         assertTrue(OpenAbl.canUseMisc(listOf(custom, custom)))
-        for (name in listOf("rocknix.bin", "stock.bin", "unknown.bin", "openabl-hash.bin")) {
+        for (name in listOf(
+            "rocknix.bin", "stock.bin", "unknown.bin", "openabl-hash.bin",
+            "openabl-marker.bin", "misc-only.bin", "oversized-misc.bin",
+        )) {
             val other = OpenAbl.inspect(fixture(name), catalog)
             for (slots in listOf(listOf(custom, other), listOf(other, custom), listOf(other, other))) {
                 assertFalse(name, OpenAbl.canUseMisc(slots))
@@ -44,6 +49,17 @@ class OpenAblTest {
         }
         assertFalse(OpenAbl.canUseMisc(listOf(custom)))
         assertFalse(OpenAbl.canUseMisc(emptyList()))
+    }
+
+    @Test fun miscCapabilityIsIndependentOfVersionAndReleaseHash() {
+        val image = fixture("openabl-misc.bin")
+        val released = listOf(OpenAbl.Image(image.size, sha256(image)))
+        val inspection = OpenAbl.inspect(image, released)
+        assertTrue(OpenAbl.canUseMisc(listOf(inspection, inspection)))
+        assertFalse(OpenAbl.inspect(fixture("openabl-marker.bin") + "OABLVARS".toByteArray(), catalog).miscCapable)
+        assertFalse(OpenAbl.canUseMisc(listOf(
+            OpenAbl.Inspection(AblKind.ROCKNIX, true), OpenAbl.Inspection(AblKind.ROCKNIX, true),
+        )))
     }
 
     @Test fun releaseCatalogCoversEveryReleasedVersionAndChip() {

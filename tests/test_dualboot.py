@@ -54,8 +54,8 @@ class DeviceTestCase(unittest.TestCase):
 
 
 class DetectionTests(DeviceTestCase):
-    def test_slot_gate_uses_hashes_before_markers(self):
-        for name, expected in (("openabl-marker", True), ("rocknix", False), ("stock", False),
+    def test_slot_gate_requires_openabl_and_misc_markers(self):
+        for name, expected in (("openabl-misc", True), ("rocknix", False), ("stock", False),
                                ("unknown", False), ("invalid-lzma", False)):
             with self.subTest(name=name):
                 for slot in ("a", "b"):
@@ -83,8 +83,23 @@ class DetectionTests(DeviceTestCase):
         self.assertEqual(before, self.device.read_bytes())
 
     def test_marker_decompression_is_bounded(self):
-        self.assertFalse(dualboot.openabl_marker((FIXTURES / "oversized-marker.bin").read_bytes()))
-        self.assertFalse(dualboot.openabl_marker(bytes(1048576) + (FIXTURES / "openabl-marker.bin").read_bytes()))
+        self.assertFalse(any(dualboot.openabl_markers((FIXTURES / "oversized-marker.bin").read_bytes())))
+        self.assertFalse(any(dualboot.openabl_markers(bytes(1048576) + (FIXTURES / "openabl-marker.bin").read_bytes())))
+
+    def test_misc_capability_is_independent_of_version_and_release_hash(self):
+        image = (FIXTURES / "openabl-misc.bin").read_bytes()
+        for slot in ("a", "b"):
+            (self.root / f"abl_{slot}").write_bytes(image)
+        catalog = [(len(image), hashlib.sha256(image).hexdigest())]
+        with patch.object(dualboot, "openabl_catalog", return_value=catalog):
+            self.assertTrue(dualboot.uses_openabl())
+        for slot in ("a", "b"):
+            path = self.root / f"abl_{slot}"
+            for name in ("openabl-marker", "misc-only", "oversized-misc"):
+                with self.subTest(slot=slot, name=name):
+                    path.write_bytes((FIXTURES / f"{name}.bin").read_bytes() + b"OABLVARS")
+                    self.assert_refused()
+            path.write_bytes(image)
 
     def test_release_catalog_includes_all_chips_and_historical_hash(self):
         rows = [line.split() for line in (ROOT / "shared/openabl-images.txt").read_text().splitlines()
