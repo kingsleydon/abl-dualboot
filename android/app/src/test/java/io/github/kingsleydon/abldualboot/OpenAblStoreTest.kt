@@ -30,7 +30,7 @@ class OpenAblStoreTest {
         }
     }
 
-    @Test fun readsDefaultsAndEverySourceLikeSettingsFromVars() {
+    @Test fun readsDefaultsAndEverySourceLikeSettingsLoad() {
         for (row in rows.filter { it[0] == "status" }) {
             assertEquals(row.toString(), row[2] + " " + row[3], OpenAblStore.status(store(row[1])))
         }

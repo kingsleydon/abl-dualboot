@@ -41,8 +41,9 @@ def openabl_catalog():
         raise SwitchError("cannot read OpenABL image catalog - nothing written") from e
 
 
-def openabl_marker(image):
-    """Bounded LZMA firmware marker, as used by OpenABL-Android-Installer."""
+def openabl_markers(image):
+    """Bounded OpenABL identity and misc-capability markers in LZMA firmware."""
+    marker, misc = False, False
     image = image[:1048576]
     for at in range(min(65536, len(image) - 12)):
         if image[at:at + 2] != b"\x5d\x00":
@@ -59,9 +60,11 @@ def openabl_marker(image):
             data = decoder.decompress(image[at:], max_length=4 << 20)
         except lzma.LZMAError:
             continue
-        if re.search(rb"OpenABL\x00[0-9]+\.[0-9]+\x00", data):
-            return True
-    return False
+        marker |= bool(re.search(rb"OpenABL\x00[0-9]+\.[0-9]+\x00", data))
+        misc |= b"OABLVARS" in data
+        if marker and misc:
+            break
+    return marker, misc
 
 
 def released_openabl(image, catalog):
@@ -73,20 +76,19 @@ def released_openabl(image, catalog):
 def uses_openabl():
     try:
         catalog = openabl_catalog()
-        markers = []
+        slots = []
         for slot in ("a", "b"):
             path = Path(BYNAME) / f"abl_{slot}"
-            marker = False
+            identified, misc = False, False
             if path.exists():
                 with path.open("rb", buffering=0) as f:
                     image = f.read(1048576)
-                    if released_openabl(image, catalog):
-                        raise SwitchError(OPENABL_ERROR)
-                    marker = openabl_marker(image)
-            markers.append(marker)
-        if all(markers):
+                    marker, misc = openabl_markers(image)
+                    identified = released_openabl(image, catalog) or marker
+            slots.append((identified, misc))
+        if all(identified and misc for identified, misc in slots):
             return True
-        if any(markers):
+        if any(identified for identified, _ in slots):
             raise SwitchError(OPENABL_ERROR)
         return False
     except OSError as e:
@@ -94,13 +96,12 @@ def uses_openabl():
 
 
 def store_records(store, sealed=True):
-    """SettingsStoreValid at OpenABL 71c0040; never format or repair a store."""
+    """SettingsStoreValid at OpenABL 2494196; never format or repair a store."""
     if (len(store) != 4096 or store[:8] != b"OABLVARS"
             or struct.unpack_from("<HH", store, 8) != (1, 4096)
-            or (sealed and struct.unpack_from("<I", store, 12)[0] != zlib.crc32(store[16:]))
-            or store[16] > 96):
+            or (sealed and struct.unpack_from("<I", store, 12)[0] != zlib.crc32(store[16:]))):
         raise SwitchError(OPENABL_ERROR)
-    records, names, at = [], set(), 128
+    records, names, at = [], set(), 16
     while at < 4096 and store[at]:
         length = store[at]
         data = at + 3 + length
@@ -118,7 +119,7 @@ def store_records(store, sealed=True):
 
 def store_values(store):
     values = {name: store[data:end] for name, _, data, end in store_records(store)}
-    # SettingsFromVars ignores wrong-length and out-of-range values.
+    # SettingsLoad ignores wrong-length and out-of-range values.
     def byte(name, maximum):
         value = values.get(name, b"")
         return value[0] if len(value) == 1 and value[0] <= maximum else 0
@@ -127,13 +128,13 @@ def store_values(store):
 
 def store_set(store, name, value):
     records = store_records(store, sealed=False)
-    last = records[-1][3] if records else 128
+    last = records[-1][3] if records else 16
     old = next((r for r in records if r[0] == name), None)
-    if old and old[3] - old[2] == len(value):
+    if old and value and old[3] - old[2] == len(value):
         store[old[2]:old[3]] = value
         return
     end = last - (old[3] - old[1] if old else 0)
-    record = bytes([len(name)]) + name + struct.pack("<H", len(value)) + value
+    record = bytes([len(name)]) + name + struct.pack("<H", len(value)) + value if value else b""
     if end + len(record) > 4096:
         raise SwitchError("OpenABL settings store is full - nothing written")
     if old:
@@ -145,7 +146,7 @@ def store_set(store, name, value):
 def edit_store(before, target, location="", internal=False):
     _, source = store_values(before)
     if target == "android":
-        mode, source = 1, 1
+        mode = 1
     elif target == "linux":
         mode = 0
         source = {"internal": 1, "sd": 2, "usb": 3}.get(location, 2 if source == 1 and not internal else source)
@@ -154,15 +155,11 @@ def edit_store(before, target, location="", internal=False):
     if location and location not in ("internal", "sd", "usb"):
         raise SwitchError("location must be sd, internal or usb")
     store = bytearray(before)
-    # Seal once, after both edits. Intermediate CRCs are not valid.
+    # SettingsSave removes defaults; StoreHolds skips a missing default.
+    names = {name for name, _, _, _ in store_records(store)}
     for name, value in ((b"BootMode", mode), (b"BootSource", source)):
-        store_set(store, name, bytes([value]))
-    values = {name: store[data:end] for name, _, data, end in store_records(store, sealed=False)}
-    model = values.get(b"DeviceModel", b"")
-    store[16:113] = bytes(97)
-    if len(model) <= 96:
-        store[16] = len(model)
-        store[17:17 + len(model)] = model
+        if value or name in names:
+            store_set(store, name, bytes([value]) if value else b"")
     struct.pack_into("<I", store, 12, zlib.crc32(store[16:]))
     store_records(store)
     return bytes(store), source

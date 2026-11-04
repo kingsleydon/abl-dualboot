@@ -38,6 +38,19 @@ class StoreTests(unittest.TestCase):
                     with self.assertRaisesRegex(dualboot.SwitchError, "OpenABL is not supported yet"):
                         dualboot.store_records(STORES[fields[0]])
 
+    def test_new_layout_preserves_device_model_and_other_settings(self):
+        before = STORES["android-internal"]
+        # v2.3.0 started at 128 and then erased 16..112 as a header model copy.
+        self.assertLess(dualboot.store_records(before)[-1][3], 128)
+        preserved = {name: before[data:end] for name, _, data, end in dualboot.store_records(before)
+                     if name not in (b"BootMode", b"BootSource")}
+        self.assertIn(b"DeviceModel", preserved)
+        for target in ("android", "linux"):
+            after, _ = dualboot.edit_store(before, target)
+            actual = {name: after[data:end] for name, _, data, end in dualboot.store_records(after)
+                      if name not in (b"BootMode", b"BootSource")}
+            self.assertEqual(preserved, actual)
+
     def test_full_store_fails_without_mutating_input(self):
         before = bytearray(STORES["full"])
         with self.assertRaisesRegex(dualboot.SwitchError, "full"):
@@ -55,7 +68,7 @@ class MiscIntegrationTests(DeviceTestCase):
         p.start()
         self.addCleanup(p.stop)
         for slot in ("a", "b"):
-            (self.root / f"abl_{slot}").write_bytes((FIXTURES / "openabl-marker.bin").read_bytes())
+            (self.root / f"abl_{slot}").write_bytes((FIXTURES / "openabl-misc.bin").read_bytes())
 
     def test_supported_status_switch_and_targets_leave_devinfo_and_prefix_untouched(self):
         original = self.device.read_bytes()
@@ -69,7 +82,7 @@ class MiscIntegrationTests(DeviceTestCase):
             self.assertEqual(self.prefix + STORES["linux-usb"], self.misc.read_bytes())
         self.device.write_bytes(original)
 
-    def test_refuses_released_hash_in_either_slot_even_with_a_valid_store(self):
+    def test_refuses_firmware_without_misc_capability_even_with_a_valid_store(self):
         for slot in ("a", "b"):
             path = self.root / f"abl_{slot}"
             old = path.read_bytes()
@@ -104,7 +117,7 @@ class MiscIntegrationTests(DeviceTestCase):
                         path.write_bytes((FIXTURES / f"{kind}.bin").read_bytes())
                     self.assert_refused()
                     self.assertEqual(before, self.misc.read_bytes())
-                    path.write_bytes((FIXTURES / "openabl-marker.bin").read_bytes())
+                    path.write_bytes((FIXTURES / "openabl-misc.bin").read_bytes())
 
     def test_leftover_store_alone_does_not_select_misc_for_rocknix(self):
         for slot in ("a", "b"):
@@ -173,7 +186,7 @@ class MiscIntegrationTests(DeviceTestCase):
             with patch.object(subprocess, "Popen") as reboot:
                 self.assertEqual({"ok": True}, asyncio.run(plugin.Plugin().restart_into("android")))
                 reboot.assert_called_once_with(["systemctl", "reboot"])
-            self.assertEqual("android internal", dualboot.status())
+            self.assertEqual("android sd", dualboot.status())
 
 
 class MiscShellTests(unittest.TestCase):

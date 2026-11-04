@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+- Fixes switching with the current OpenABL settings store, preserving the device model and Linux boot source.
+- Detects support from the bootloader’s settings capability; released v1.0–v1.2 remain unsupported.
+
 ## v2.3.0
 - Detects OpenABL and never installs ROCKNIX over it.
 - Experimental: switching on OpenABL builds that keep settings in misc (after v1.2); released v1.0–v1.2 are not supported yet.
