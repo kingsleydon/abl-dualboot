@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v2.3.1
 - Fixes switching with the current OpenABL settings store, preserving the device model and Linux boot source.
 - Detects support from the bootloader’s settings capability; released v1.0–v1.2 remain unsupported.
 
